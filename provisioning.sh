@@ -82,7 +82,7 @@ if [ ! -d "ComfyUI-KJNodes" ]; then
     cd ..
 fi
 
-# Custom Scripts (MathExpression) - правильный репозиторий для воркфлоу
+# Custom Scripts (MathExpression)
 if [ ! -d "ComfyUI-Custom-Scripts" ]; then
     git clone https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git
     cd ComfyUI-Custom-Scripts
@@ -97,7 +97,7 @@ if [ ! -d "ComfyUI-Frame-Interpolation" ]; then
     cd ..
 fi
 
-# Easy Use (правильный репозиторий)
+# Easy Use
 if [ ! -d "ComfyUI-Easy-Use" ]; then
     git clone https://github.com/yolain/ComfyUI-Easy-Use.git
     cd ComfyUI-Easy-Use
@@ -107,30 +107,25 @@ fi
 
 echo "=== Custom nodes installed ==="
 
-# Устанавливаем критически важную зависимость opencv-python (нужна для Easy-Use и WanVideoWrapper)
-echo "=== Installing missing system dependencies ==="
-pip install opencv-python opencv-python-headless
+# Устанавливаем критические зависимости
+echo "=== Installing critical dependencies ==="
+pip install --upgrade pip
+pip install opencv-python opencv-python-headless --force-reinstall
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
-# Запускаем Try Fix через ComfyUI-Manager CLI
-echo "=== Running ComfyUI-Manager fix ==="
-cd /workspace/ComfyUI
+# Проверяем установку OpenCV
+python -c "import cv2; print('OpenCV installed successfully')"
 
-# Создаём config.ini если нет
-mkdir -p custom_nodes/ComfyUI-Manager
-if [ ! -f "custom_nodes/ComfyUI-Manager/config.ini" ]; then
-    echo -e '[default]\nsecurity_level = weak' > custom_nodes/ComfyUI-Manager/config.ini
-fi
-
+# Запускаем Fix для каждой ноды отдельно
 echo "=== Running ComfyUI-Manager fix for each node ==="
 cd /workspace/ComfyUI
 
-# Создаём config.ini если нет
 mkdir -p custom_nodes/ComfyUI-Manager
 if [ ! -f "custom_nodes/ComfyUI-Manager/config.ini" ]; then
     echo -e '[default]\nsecurity_level = weak' > custom_nodes/ComfyUI-Manager/config.ini
 fi
 
-# Фиксим по очереди (по одному, чтобы избежать ошибок)
+# Фиксим по очереди
 python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-WanVideoWrapper
 sleep 2
 python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-Easy-Use
@@ -143,7 +138,7 @@ python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-Frame-Interpolation
 
 echo "=== Fix completed ==="
 
-# Перезапускаем ComfyUI через supervisor
+# Перезапускаем ComfyUI
 echo "=== Restarting ComfyUI ==="
 supervisorctl restart comfyui
 
