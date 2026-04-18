@@ -91,42 +91,30 @@ if [ ! -d "ComfyUI-Easy-Use" ]; then
     git clone https://github.com/yolain/ComfyUI-Easy-Use.git
 fi
 
-echo "=== Custom nodes installed ==="
-
-# Устанавливаем зависимости в ВИРТУАЛЬНОЕ ОКРУЖЕНИЕ ComfyUI
+# Устанавливаем зависимости в виртуальное окружение ComfyUI
 echo "=== Installing dependencies in venv ==="
 /venv/main/bin/pip install --upgrade pip
-/venv/main/bin/pip install --force-reinstall \
-    torch \
-    torchvision \
-    torchaudio \
+
+# Все пакеты как при Try Fix
+/venv/main/bin/pip install \
+    ftfy \
     accelerate \
-    transformers \
+    einops \
     diffusers \
     peft \
-    opencv-python \
-    opencv-python-headless \
-    GitPython \
     sentencepiece \
     protobuf \
-    einops \
-    ftfy
-    gguf          # <--- добавил
+    pyloudnorm \
+    gguf \
+    opencv-python \
+    opencv-python-headless \
+    scipy \
+    transformers \
+    torch \
+    torchvision \
+    torchaudio
 
-# Проверяем
+# Проверяем критические модули
 /venv/main/bin/python -c "import cv2; print('✅ OpenCV OK')"
 /venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
 /venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
-
-# Создаём конфиг для Manager
-mkdir -p custom_nodes/ComfyUI-Manager
-echo -e '[default]\nsecurity_level = weak' > custom_nodes/ComfyUI-Manager/config.ini
-
-# Удаляем флаг provisioning
-rm -f /.provisioning 2>/dev/null || true
-
-# Перезапускаем ComfyUI
-echo "=== Restarting ComfyUI ==="
-supervisorctl restart comfyui
-
-echo "=== Provisioning complete ==="
