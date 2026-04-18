@@ -107,44 +107,32 @@ fi
 
 echo "=== Custom nodes installed ==="
 
-# Устанавливаем критические зависимости
-echo "=== Installing critical dependencies ==="
+# Устанавливаем ВСЕ зависимости как при нажатии Try Fix
+echo "=== Installing all dependencies (like Try Fix) ==="
 pip install --upgrade pip
-pip install GitPython
-pip install opencv-python opencv-python-headless --force-reinstall
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+pip install --force-reinstall \
+    accelerate \
+    opencv-python \
+    opencv-python-headless \
+    GitPython \
+    transformers \
+    diffusers \
+    peft \
+    torch \
+    torchvision \
+    torchaudio \
+    sentencepiece \
+    protobuf
 
-# Проверяем установку OpenCV
-python -c "import cv2; print('OpenCV installed successfully')"
+# Проверяем установку
+python -c "import cv2; print('✅ OpenCV OK')"
+python -c "import accelerate; print('✅ Accelerate OK')"
+python -c "import transformers; print('✅ Transformers OK')"
+python -c "import diffusers; print('✅ Diffusers OK')"
 
-# Запускаем Fix для каждой ноды отдельно
-echo "=== Running ComfyUI-Manager fix for each node ==="
-cd /workspace/ComfyUI
-
+# Создаём конфиг для Manager
 mkdir -p custom_nodes/ComfyUI-Manager
-if [ ! -f "custom_nodes/ComfyUI-Manager/config.ini" ]; then
-    echo -e '[default]\nsecurity_level = weak' > custom_nodes/ComfyUI-Manager/config.ini
-fi
-
-# Фиксим по очереди
-python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-WanVideoWrapper
-sleep 2
-python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-Easy-Use
-sleep 2
-python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-Custom-Scripts
-sleep 2
-python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-KJNodes
-sleep 2
-python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-Frame-Interpolation
-
-# Принудительно устанавливаем opencv для Easy-Use
-echo "=== Force reinstall opencv for Easy-Use ==="
-pip uninstall opencv-python opencv-python-headless -y
-pip install opencv-python opencv-python-headless --force-reinstall
-
-# Проверяем
-python -c "import cv2; print('OpenCV OK')"
-echo "=== Fix completed ==="
+echo -e '[default]\nsecurity_level = weak' > custom_nodes/ComfyUI-Manager/config.ini
 
 # Перезапускаем ComfyUI
 echo "=== Restarting ComfyUI ==="
