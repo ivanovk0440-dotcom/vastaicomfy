@@ -137,6 +137,13 @@ python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-KJNodes
 sleep 2
 python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-Frame-Interpolation
 
+# Принудительно устанавливаем opencv для Easy-Use
+echo "=== Force reinstall opencv for Easy-Use ==="
+pip uninstall opencv-python opencv-python-headless -y
+pip install opencv-python opencv-python-headless --force-reinstall
+
+# Проверяем
+python -c "import cv2; print('OpenCV OK')"
 echo "=== Fix completed ==="
 
 # Перезапускаем ComfyUI
