@@ -118,3 +118,44 @@ echo "=== Installing dependencies in venv ==="
 /venv/main/bin/python -c "import cv2; print('✅ OpenCV OK')"
 /venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
 /venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
+# мблишка
+# Запускаем API-обработчик для бота
+cd /workspace/ComfyUI
+python -c "
+import json, base64, tempfile, os
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+@app.route('/generate/sync', methods=['POST'])
+def generate():
+    data = request.json
+    workflow = data['workflow_json']
+    img_b64 = data['image_base64']
+    
+    # Сохраняем картинку
+    img_data = base64.b64decode(img_b64)
+    path = '/workspace/ComfyUI/input/temp.jpg'
+    os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
+    with open(path, 'wb') as f:
+        f.write(img_data)
+    
+    workflow['148']['widgets_values'][0] = 'temp.jpg'
+    
+    # Запускаем генерацию через API ComfyUI
+    import requests
+    resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
+    prompt_id = resp.json()['prompt_id']
+    
+    # Ждём результат
+    while True:
+        resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
+        if resp.json().get(prompt_id):
+            break
+        time.sleep(1)
+    
+    # Возвращаем видео
+    return jsonify({'video_url': 'http://localhost:18188/view?filename=output.mp4'})
+
+app.run(host='0.0.0.0', port=3000)
+" &
