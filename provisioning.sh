@@ -66,73 +66,64 @@ echo "=== All models downloaded ==="
 echo "=== Installing custom nodes ==="
 cd custom_nodes
 
-# WanVideo Wrapper (kijai)
+# WanVideo Wrapper
 if [ ! -d "ComfyUI-WanVideoWrapper" ]; then
     git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git
-    cd ComfyUI-WanVideoWrapper
-    pip install -r requirements.txt
-    cd ..
 fi
 
 # KJNodes
 if [ ! -d "ComfyUI-KJNodes" ]; then
     git clone https://github.com/kijai/ComfyUI-KJNodes.git
-    cd ComfyUI-KJNodes
-    pip install -r requirements.txt
-    cd ..
 fi
 
 # Custom Scripts (MathExpression)
 if [ ! -d "ComfyUI-Custom-Scripts" ]; then
     git clone https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git
-    cd ComfyUI-Custom-Scripts
-    cd ..
 fi
 
 # Frame Interpolation (RIFE)
 if [ ! -d "ComfyUI-Frame-Interpolation" ]; then
     git clone https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git
-    cd ComfyUI-Frame-Interpolation
-    pip install -r requirements.txt
-    cd ..
 fi
 
 # Easy Use
 if [ ! -d "ComfyUI-Easy-Use" ]; then
     git clone https://github.com/yolain/ComfyUI-Easy-Use.git
-    cd ComfyUI-Easy-Use
-    pip install -r requirements.txt
-    cd ..
 fi
 
 echo "=== Custom nodes installed ==="
 
-# Устанавливаем ВСЕ зависимости как при нажатии Try Fix
-echo "=== Installing all dependencies (like Try Fix) ==="
+# Устанавливаем ВСЕ зависимости (полный аналог Try Fix)
+echo "=== Installing all dependencies (full fix) ==="
 pip install --upgrade pip
 pip install --force-reinstall \
-    accelerate \
-    opencv-python \
-    opencv-python-headless \
-    GitPython \
-    transformers \
-    diffusers \
-    peft \
     torch \
     torchvision \
     torchaudio \
+    accelerate \
+    transformers \
+    diffusers \
+    peft \
+    opencv-python \
+    opencv-python-headless \
+    GitPython \
     sentencepiece \
-    protobuf
+    protobuf \
+    einops \
+    ftfy \
+    pillow
 
-# Проверяем установку
+# Проверяем критические модули
 python -c "import cv2; print('✅ OpenCV OK')"
 python -c "import accelerate; print('✅ Accelerate OK')"
-python -c "import transformers; print('✅ Transformers OK')"
-python -c "import diffusers; print('✅ Diffusers OK')"
+python -c "import torch; print(f'✅ PyTorch {torch.__version__} OK')"
 
-# Создаём конфиг для Manager
+# Создаём конфиг для Manager (отключаем безопасность)
 mkdir -p custom_nodes/ComfyUI-Manager
 echo -e '[default]\nsecurity_level = weak' > custom_nodes/ComfyUI-Manager/config.ini
+
+# Принудительно удаляем флаг provisioning, чтобы ComfyUI запустился
+rm -f /.provisioning 2>/dev/null || true
 
 # Перезапускаем ComfyUI
 echo "=== Restarting ComfyUI ==="
