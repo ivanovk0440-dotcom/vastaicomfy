@@ -4,7 +4,7 @@ set -e
 echo "=== Starting provisioning ==="
 cd /workspace/ComfyUI
 
-# Создаём папки
+# Создаём папки для моделей
 mkdir -p models/diffusion_models
 mkdir -p models/text_encoders
 mkdir -p models/vae
@@ -102,5 +102,26 @@ if [ ! -d "ComfyUI-Easy-Use" ]; then
     pip install -r requirements.txt
     cd ..
 fi
+
+echo "=== Custom nodes installed ==="
+
+# Запускаем Try Fix через ComfyUI-Manager CLI
+echo "=== Running ComfyUI-Manager fix ==="
+cd /workspace/ComfyUI
+
+# Создаём config.ini если нет (безопасность и так отключена)
+mkdir -p custom_nodes/ComfyUI-Manager
+if [ ! -f "custom_nodes/ComfyUI-Manager/config.ini" ]; then
+    echo -e '[default]\nsecurity_level = weak' > custom_nodes/ComfyUI-Manager/config.ini
+fi
+
+# Запускаем fix для всех нод
+python custom_nodes/ComfyUI-Manager/cm-cli.py fix all
+
+echo "=== Fix completed ==="
+
+# Перезапускаем ComfyUI через supervisor
+echo "=== Restarting ComfyUI ==="
+supervisorctl restart comfyui
 
 echo "=== Provisioning complete ==="
