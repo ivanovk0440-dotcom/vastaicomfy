@@ -110,6 +110,7 @@ echo "=== Custom nodes installed ==="
 # Устанавливаем критические зависимости
 echo "=== Installing critical dependencies ==="
 pip install --upgrade pip
+pip install GitPython
 pip install opencv-python opencv-python-headless --force-reinstall
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
