@@ -93,10 +93,10 @@ fi
 
 echo "=== Custom nodes installed ==="
 
-# Устанавливаем ВСЕ зависимости (полный аналог Try Fix)
-echo "=== Installing all dependencies (full fix) ==="
-pip install --upgrade pip
-pip install --force-reinstall \
+# Устанавливаем зависимости в ВИРТУАЛЬНОЕ ОКРУЖЕНИЕ ComfyUI
+echo "=== Installing dependencies in venv ==="
+/venv/main/bin/pip install --upgrade pip
+/venv/main/bin/pip install --force-reinstall \
     torch \
     torchvision \
     torchaudio \
@@ -110,19 +110,18 @@ pip install --force-reinstall \
     sentencepiece \
     protobuf \
     einops \
-    ftfy \
-    pillow
+    ftfy
 
-# Проверяем критические модули
-python -c "import cv2; print('✅ OpenCV OK')"
-python -c "import accelerate; print('✅ Accelerate OK')"
-python -c "import torch; print(f'✅ PyTorch {torch.__version__} OK')"
+# Проверяем
+/venv/main/bin/python -c "import cv2; print('✅ OpenCV OK')"
+/venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
+/venv/main/bin/python -c "import torch; print(f'✅ PyTorch {torch.__version__} OK')"
 
-# Создаём конфиг для Manager (отключаем безопасность)
+# Создаём конфиг для Manager
 mkdir -p custom_nodes/ComfyUI-Manager
 echo -e '[default]\nsecurity_level = weak' > custom_nodes/ComfyUI-Manager/config.ini
 
-# Принудительно удаляем флаг provisioning, чтобы ComfyUI запустился
+# Удаляем флаг provisioning
 rm -f /.provisioning 2>/dev/null || true
 
 # Перезапускаем ComfyUI
