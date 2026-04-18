@@ -178,6 +178,100 @@ EOF
 
 # Запускаем worker в фоне
 /venv/main/bin/python /workspace/ComfyUI/worker.py &
-echo "=== API worker started on port 3000 ==="
 
+# Запускаем API-обработчик для бота
+echo "=== Starting API worker on port 3000 ==="
+cd /workspace/ComfyUI
+
+# Устанавливаем Flask
+/venv/main/bin/pip install flask requests
+
+# Создаём worker.py
+cat > /workspace/ComfyUI/worker.py << 'EOF'
+import json
+import base64
+import time
+import os
+import requests
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+@app.route('/generate/sync', methods=['POST'])
+def generate():
+    try:
+        data = request.json
+        workflow = data.get('workflow_json')
+        img_b64 = data.get('image_base64')
+        
+        if not workflow or not img_b64:
+            return jsonify({'error': 'Missing workflow or image'}), 400
+        
+        # Сохраняем картинку
+        img_data = base64.b64decode(img_b64)
+        os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
+        img_path = '/workspace/ComfyUI/input/temp.jpg'
+        with open(img_path, 'wb') as f:
+            f.write(img_data)
+        
+        # Обновляем workflow
+        workflow['148']['widgets_values'][0] = 'temp.jpg'
+        
+        # Ждём готовности ComfyUI
+        for i in range(30):
+            try:
+                requests.get('http://localhost:18188/', timeout=2)
+                break
+            except:
+                time.sleep(1)
+        
+        # Отправляем в ComfyUI
+        resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
+        if resp.status_code != 200:
+            return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
+        
+        prompt_id = resp.json()['prompt_id']
+        
+        # Ждём результат
+        timeout = 300
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
+                data = resp.json()
+                if data.get(prompt_id):
+                    outputs = data[prompt_id]['outputs']
+                    for node_id, node_output in outputs.items():
+                        if 'videos' in node_output:
+                            video_filename = node_output['videos'][0]['filename']
+                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
+            except:
+                pass
+            time.sleep(2)
+        
+        return jsonify({'error': 'Timeout waiting for video'}), 500
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    print("Starting API worker on port 3000...")
+    app.run(host='0.0.0.0', port=3000, debug=False)
+EOF
+
+# Ждём пока ComfyUI полностью запустится
+echo "Waiting for ComfyUI to be ready..."
+for i in {1..60}; do
+    if curl -s http://localhost:18188/ > /dev/null 2>&1; then
+        echo "ComfyUI is ready!"
+        break
+    fi
+    echo "Waiting... ($i/60)"
+    sleep 2
+done
+
+# Запускаем worker в фоне
+echo "Starting worker..."
+/venv/main/bin/python /workspace/ComfyUI/worker.py &
+echo "=== API worker started on port 3000 ==="
 echo "=== Provisioning complete ==="
