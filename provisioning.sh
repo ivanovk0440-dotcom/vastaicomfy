@@ -4,61 +4,43 @@ set -e
 echo "=== Starting provisioning ==="
 cd /workspace/ComfyUI
 
-# Создаём папки для моделей
-mkdir -p models/diffusion_models
-mkdir -p models/text_encoders
-mkdir -p models/vae
-mkdir -p models/loras
-mkdir -p models/rife
+# Создаём папки
+mkdir -p models/diffusion_models models/text_encoders models/vae models/loras models/rife
 
 # 1. VAE
 echo "=== Downloading VAE ==="
-if [ ! -f "models/vae/wan_2.1_vae.safetensors" ]; then
-    wget -O models/vae/wan_2.1_vae.safetensors \
-        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors?download=1"
-fi
+wget -q --show-progress -O models/vae/wan_2.1_vae.safetensors \
+    "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors?download=1" || echo "VAE already exists"
 
 # 2. Text Encoder
 echo "=== Downloading Text Encoder ==="
-if [ ! -f "models/text_encoders/nsfw_wan_umt5-xxl_fp8_scaled.safetensors" ]; then
-    wget -O models/text_encoders/nsfw_wan_umt5-xxl_fp8_scaled.safetensors \
-        "https://huggingface.co/NSFW-API/NSFW-Wan-UMT5-XXL/resolve/main/nsfw_wan_umt5-xxl_fp8_scaled.safetensors?download=1"
-fi
+wget -q --show-progress -O models/text_encoders/nsfw_wan_umt5-xxl_fp8_scaled.safetensors \
+    "https://huggingface.co/NSFW-API/NSFW-Wan-UMT5-XXL/resolve/main/nsfw_wan_umt5-xxl_fp8_scaled.safetensors?download=1" || echo "Text Encoder already exists"
 
 # 3. Diffusion model HIGH lighting
 echo "=== Downloading Wan model HIGH lighting ==="
-if [ ! -f "models/diffusion_models/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_v2.0.safetensors" ]; then
-    wget -O models/diffusion_models/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_v2.0.safetensors \
-        "https://huggingface.co/FX-FeiHou/wan2.2-Remix/resolve/main/NSFW/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_v2.0.safetensors?download=1"
-fi
+wget -q --show-progress -O models/diffusion_models/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_v2.0.safetensors \
+    "https://huggingface.co/FX-FeiHou/wan2.2-Remix/resolve/main/NSFW/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_v2.0.safetensors?download=1" || echo "HIGH model already exists"
 
 # 4. Diffusion model LOW lighting
 echo "=== Downloading Wan model LOW lighting ==="
-if [ ! -f "models/diffusion_models/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_v2.0.safetensors" ]; then
-    wget -O models/diffusion_models/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_v2.0.safetensors \
-        "https://huggingface.co/FX-FeiHou/wan2.2-Remix/resolve/main/NSFW/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_v2.0.safetensors?download=1"
-fi
+wget -q --show-progress -O models/diffusion_models/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_v2.0.safetensors \
+    "https://huggingface.co/FX-FeiHou/wan2.2-Remix/resolve/main/NSFW/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_v2.0.safetensors?download=1" || echo "LOW model already exists"
 
 # 5. LoRA HIGH
 echo "=== Downloading LoRA HIGH ==="
-if [ ! -f "models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors" ]; then
-    wget -O models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors \
-        "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22-Lightning/old/Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors?download=1"
-fi
+wget -q --show-progress -O models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors \
+    "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22-Lightning/old/Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors?download=1" || echo "LoRA HIGH already exists"
 
 # 6. LoRA LOW
 echo "=== Downloading LoRA LOW ==="
-if [ ! -f "models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors" ]; then
-    wget -O models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors \
-        "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22-Lightning/old/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors?download=1"
-fi
+wget -q --show-progress -O models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors \
+    "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22-Lightning/old/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors?download=1" || echo "LoRA LOW already exists"
 
 # 7. RIFE model
 echo "=== Downloading RIFE model ==="
-if [ ! -f "models/rife/rife47.pth" ]; then
-    wget -O models/rife/rife47.pth \
-        "https://huggingface.co/jasonot/mycomfyui/resolve/main/rife47.pth?download=1"
-fi
+wget -q --show-progress -O models/rife/rife47.pth \
+    "https://huggingface.co/jasonot/mycomfyui/resolve/main/rife47.pth?download=1" || echo "RIFE already exists"
 
 echo "=== All models downloaded ==="
 
@@ -66,212 +48,88 @@ echo "=== All models downloaded ==="
 echo "=== Installing custom nodes ==="
 cd custom_nodes
 
-# WanVideo Wrapper
-if [ ! -d "ComfyUI-WanVideoWrapper" ]; then
-    git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git
-fi
-
-# KJNodes
-if [ ! -d "ComfyUI-KJNodes" ]; then
-    git clone https://github.com/kijai/ComfyUI-KJNodes.git
-fi
-
-# Custom Scripts (MathExpression)
-if [ ! -d "ComfyUI-Custom-Scripts" ]; then
-    git clone https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git
-fi
-
-# Frame Interpolation (RIFE)
-if [ ! -d "ComfyUI-Frame-Interpolation" ]; then
-    git clone https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git
-fi
-
-# Easy Use
-if [ ! -d "ComfyUI-Easy-Use" ]; then
-    git clone https://github.com/yolain/ComfyUI-Easy-Use.git
-fi
+for repo in \
+    "https://github.com/kijai/ComfyUI-WanVideoWrapper.git" \
+    "https://github.com/kijai/ComfyUI-KJNodes.git" \
+    "https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git" \
+    "https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git" \
+    "https://github.com/yolain/ComfyUI-Easy-Use.git"
+do
+    dir=$(basename "$repo" .git)
+    if [ ! -d "$dir" ]; then
+        git clone "$repo"
+    fi
+done
 
 echo "=== Custom nodes installed ==="
 
 # Устанавливаем зависимости
 echo "=== Installing dependencies ==="
-/venv/main/bin/pip install --upgrade pip
-/venv/main/bin/pip install \
-    ftfy accelerate einops diffusers peft sentencepiece protobuf \
-    pyloudnorm gguf opencv-python opencv-python-headless scipy \
-    transformers flask requests
+/venv/main/bin/pip install --quiet --upgrade pip
+/venv/main/bin/pip install --quiet \
+    flask requests \
+    opencv-python opencv-python-headless \
+    accelerate transformers diffusers peft \
+    gguf ftfy einops sentencepiece protobuf
 
-# Проверяем
-/venv/main/bin/python -c "import cv2; print('✅ OpenCV OK')"
-/venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
-/venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
-/venv/main/bin/python -c "import flask; print('✅ Flask OK')"
+echo "=== Dependencies installed ==="
 
-# Запускаем API-обработчик для бота
+# Запускаем worker в фоне (простой и надёжный)
 echo "=== Starting API worker on port 3000 ==="
-cd /workspace/ComfyUI
 
-# Создаём worker.py
 cat > /workspace/ComfyUI/worker.py << 'EOF'
-import json
-import base64
-import time
-import os
-from flask import Flask, request, jsonify
-import requests
-
-app = Flask(__name__)
-
-@app.route('/generate/sync', methods=['POST'])
-def generate():
-    try:
-        data = request.json
-        workflow = data.get('workflow_json')
-        img_b64 = data.get('image_base64')
-        
-        if not workflow or not img_b64:
-            return jsonify({'error': 'Missing workflow or image'}), 400
-        
-        # Сохраняем картинку
-        img_data = base64.b64decode(img_b64)
-        os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
-        img_path = '/workspace/ComfyUI/input/temp.jpg'
-        with open(img_path, 'wb') as f:
-            f.write(img_data)
-        
-        # Обновляем workflow
-        workflow['148']['widgets_values'][0] = 'temp.jpg'
-        
-        # Отправляем в ComfyUI
-        resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
-        if resp.status_code != 200:
-            return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
-        
-        prompt_id = resp.json()['prompt_id']
-        
-        # Ждём результат
-        timeout = 300
-        start = time.time()
-        while time.time() - start < timeout:
-            try:
-                resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
-                data = resp.json()
-                if data.get(prompt_id):
-                    outputs = data[prompt_id]['outputs']
-                    for node_id, node_output in outputs.items():
-                        if 'videos' in node_output:
-                            video_filename = node_output['videos'][0]['filename']
-                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
-            except:
-                pass
-            time.sleep(2)
-        
-        return jsonify({'error': 'Timeout waiting for video'}), 500
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
-    print("Starting API worker on port 3000...")
-    app.run(host='0.0.0.0', port=3000, debug=False)
-EOF
-
-# Запускаем worker в фоне
-/venv/main/bin/python /workspace/ComfyUI/worker.py &
-
-# Запускаем API-обработчик для бота
-echo "=== Starting API worker on port 3000 ==="
-cd /workspace/ComfyUI
-
-# Устанавливаем Flask
-/venv/main/bin/pip install flask requests
-
-# Создаём worker.py
-cat > /workspace/ComfyUI/worker.py << 'EOF'
-import json
-import base64
-import time
-import os
-import requests
+import json, base64, time, os, requests, threading
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
 @app.route('/generate/sync', methods=['POST'])
 def generate():
-    try:
-        data = request.json
-        workflow = data.get('workflow_json')
-        img_b64 = data.get('image_base64')
-        
-        if not workflow or not img_b64:
-            return jsonify({'error': 'Missing workflow or image'}), 400
-        
-        # Сохраняем картинку
-        img_data = base64.b64decode(img_b64)
-        os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
-        img_path = '/workspace/ComfyUI/input/temp.jpg'
-        with open(img_path, 'wb') as f:
-            f.write(img_data)
-        
-        # Обновляем workflow
-        workflow['148']['widgets_values'][0] = 'temp.jpg'
-        
-        # Ждём готовности ComfyUI
-        for i in range(30):
-            try:
-                requests.get('http://localhost:18188/', timeout=2)
-                break
-            except:
-                time.sleep(1)
-        
-        # Отправляем в ComfyUI
-        resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
-        if resp.status_code != 200:
-            return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
-        
-        prompt_id = resp.json()['prompt_id']
-        
-        # Ждём результат
-        timeout = 300
-        start = time.time()
-        while time.time() - start < timeout:
-            try:
-                resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
-                data = resp.json()
-                if data.get(prompt_id):
-                    outputs = data[prompt_id]['outputs']
-                    for node_id, node_output in outputs.items():
-                        if 'videos' in node_output:
-                            video_filename = node_output['videos'][0]['filename']
-                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
-            except:
-                pass
-            time.sleep(2)
-        
-        return jsonify({'error': 'Timeout waiting for video'}), 500
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    data = request.json
+    workflow = data.get('workflow_json', {})
+    img_b64 = data.get('image_base64', '')
+    
+    # Сохраняем картинку
+    os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
+    with open('/workspace/ComfyUI/input/temp.jpg', 'wb') as f:
+        f.write(base64.b64decode(img_b64))
+    
+    workflow['148']['widgets_values'][0] = 'temp.jpg'
+    
+    # Ждём ComfyUI
+    for _ in range(30):
+        try:
+            requests.get('http://localhost:18188/', timeout=2)
+            break
+        except:
+            time.sleep(1)
+    
+    # Отправляем запрос
+    resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
+    prompt_id = resp.json()['prompt_id']
+    
+    # Ждём результат
+    while True:
+        resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
+        if resp.json().get(prompt_id):
+            break
+        time.sleep(2)
+    
+    # Ищем видео
+    outputs = resp.json()[prompt_id]['outputs']
+    for node_id, node_output in outputs.items():
+        if 'videos' in node_output:
+            video = node_output['videos'][0]['filename']
+            return jsonify({'video_url': f'http://localhost:18188/view?filename={video}'})
+    
+    return jsonify({'error': 'Video not found'}), 404
 
 if __name__ == '__main__':
-    print("Starting API worker on port 3000...")
-    app.run(host='0.0.0.0', port=3000, debug=False)
+    app.run(host='0.0.0.0', port=3000)
 EOF
 
-# Ждём пока ComfyUI полностью запустится
-echo "Waiting for ComfyUI to be ready..."
-for i in {1..60}; do
-    if curl -s http://localhost:18188/ > /dev/null 2>&1; then
-        echo "ComfyUI is ready!"
-        break
-    fi
-    echo "Waiting... ($i/60)"
-    sleep 2
-done
+# Запускаем
+nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
+echo "=== API worker started ==="
 
-# Запускаем worker в фоне
-echo "Starting worker..."
-/venv/main/bin/python /workspace/ComfyUI/worker.py &
-echo "=== API worker started on port 3000 ==="
 echo "=== Provisioning complete ==="
