@@ -82,9 +82,11 @@ if [ ! -d "ComfyUI-KJNodes" ]; then
     cd ..
 fi
 
-# Custom Scripts (MathExpression)
-if [ ! -d "cg-use-everywhere" ]; then
-    git clone https://github.com/chrisgoringe/cg-use-everywhere.git
+# Custom Scripts (MathExpression) - правильный репозиторий для воркфлоу
+if [ ! -d "ComfyUI-Custom-Scripts" ]; then
+    git clone https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git
+    cd ComfyUI-Custom-Scripts
+    cd ..
 fi
 
 # Frame Interpolation (RIFE)
@@ -105,11 +107,15 @@ fi
 
 echo "=== Custom nodes installed ==="
 
+# Устанавливаем критически важную зависимость opencv-python (нужна для Easy-Use и WanVideoWrapper)
+echo "=== Installing missing system dependencies ==="
+pip install opencv-python opencv-python-headless
+
 # Запускаем Try Fix через ComfyUI-Manager CLI
 echo "=== Running ComfyUI-Manager fix ==="
 cd /workspace/ComfyUI
 
-# Создаём config.ini если нет (безопасность и так отключена)
+# Создаём config.ini если нет
 mkdir -p custom_nodes/ComfyUI-Manager
 if [ ! -f "custom_nodes/ComfyUI-Manager/config.ini" ]; then
     echo -e '[default]\nsecurity_level = weak' > custom_nodes/ComfyUI-Manager/config.ini
