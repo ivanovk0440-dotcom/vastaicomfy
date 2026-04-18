@@ -121,8 +121,25 @@ if [ ! -f "custom_nodes/ComfyUI-Manager/config.ini" ]; then
     echo -e '[default]\nsecurity_level = weak' > custom_nodes/ComfyUI-Manager/config.ini
 fi
 
-# Запускаем fix для всех нод
-python custom_nodes/ComfyUI-Manager/cm-cli.py fix all
+echo "=== Running ComfyUI-Manager fix for each node ==="
+cd /workspace/ComfyUI
+
+# Создаём config.ini если нет
+mkdir -p custom_nodes/ComfyUI-Manager
+if [ ! -f "custom_nodes/ComfyUI-Manager/config.ini" ]; then
+    echo -e '[default]\nsecurity_level = weak' > custom_nodes/ComfyUI-Manager/config.ini
+fi
+
+# Фиксим по очереди (по одному, чтобы избежать ошибок)
+python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-WanVideoWrapper
+sleep 2
+python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-Easy-Use
+sleep 2
+python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-Custom-Scripts
+sleep 2
+python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-KJNodes
+sleep 2
+python custom_nodes/ComfyUI-Manager/cm-cli.py fix ComfyUI-Frame-Interpolation
 
 echo "=== Fix completed ==="
 
