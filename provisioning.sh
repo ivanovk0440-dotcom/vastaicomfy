@@ -111,11 +111,12 @@ echo "=== Installing dependencies in venv ==="
     protobuf \
     einops \
     ftfy
+    gguf          # <--- добавил
 
 # Проверяем
 /venv/main/bin/python -c "import cv2; print('✅ OpenCV OK')"
 /venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
-/venv/main/bin/python -c "import torch; print(f'✅ PyTorch {torch.__version__} OK')"
+/venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
 
 # Создаём конфиг для Manager
 mkdir -p custom_nodes/ComfyUI-Manager
