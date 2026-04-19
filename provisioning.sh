@@ -78,12 +78,53 @@ echo "=== Installing dependencies ==="
 
 echo "=== Dependencies installed ==="
 
-# Создаём worker.py на порту 8288
+# Создаём worker.py с поддержкой API формата
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
+
+def convert_to_api_format(workflow_json):
+    """Конвертирует стандартный workflow в API формат ComfyUI"""
+    if "nodes" not in workflow_json:
+        return workflow_json
+    
+    api_workflow = {}
+    for node in workflow_json["nodes"]:
+        node_id = str(node["id"])
+        class_type = node.get("type")
+        
+        if not class_type:
+            continue
+        
+        api_workflow[node_id] = {
+            "class_type": class_type,
+            "inputs": {}
+        }
+        
+        if node.get("title"):
+            api_workflow[node_id]["_meta"] = {"title": node["title"]}
+        
+        # Добавляем widgets_values как inputs
+        if node.get("widgets_values"):
+            inputs = {}
+            for i, val in enumerate(node["widgets_values"]):
+                inputs[f"input_{i}"] = val
+            api_workflow[node_id]["inputs"] = inputs
+        
+        # Обрабатываем связи (links)
+        for input_slot in node.get("inputs", []):
+            link = input_slot.get("link")
+            if link:
+                for link_data in workflow_json.get("links", []):
+                    if len(link_data) >= 5 and link_data[0] == link:
+                        target_node_id = str(link_data[1])
+                        target_output = link_data[2]
+                        api_workflow[node_id]["inputs"][input_slot["name"]] = [target_node_id, target_output]
+                        break
+    
+    return api_workflow
 
 @app.route('/generate/sync', methods=['POST'])
 def generate():
@@ -95,26 +136,40 @@ def generate():
         if not workflow or not img_b64:
             return jsonify({'error': 'Missing workflow or image'}), 400
         
+        # Сохраняем картинку
         os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
         img_path = '/workspace/ComfyUI/input/temp.jpg'
         with open(img_path, 'wb') as f:
             f.write(base64.b64decode(img_b64))
         
-        workflow['148']['widgets_values'][0] = 'temp.jpg'
+        # Обновляем ноду LoadImage (148)
+        for node in workflow.get("nodes", []):
+            if node.get("id") == 148:
+                node["widgets_values"][0] = "temp.jpg"
+                break
         
-        for i in range(30):
+        # Конвертируем в API формат
+        api_workflow = convert_to_api_format(workflow)
+        
+        print(f"📤 Отправка в ComfyUI: {len(api_workflow)} нод")
+        
+        # Ждём ComfyUI
+        for _ in range(30):
             try:
                 requests.get('http://localhost:18188/', timeout=2)
                 break
             except:
                 time.sleep(1)
         
-        resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
+        # Отправляем в ComfyUI
+        resp = requests.post('http://localhost:18188/prompt', json={'prompt': api_workflow})
         if resp.status_code != 200:
             return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
         
         prompt_id = resp.json()['prompt_id']
+        print(f"✅ Prompt ID: {prompt_id}")
         
+        # Ждём результат
         timeout = 300
         start = time.time()
         while time.time() - start < timeout:
@@ -134,6 +189,7 @@ def generate():
         return jsonify({'error': 'Timeout waiting for video'}), 500
         
     except Exception as e:
+        print(f"❌ Ошибка: {e}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
