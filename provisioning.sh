@@ -69,8 +69,8 @@ echo "=== Custom nodes installed ==="
 
 # Устанавливаем зависимости
 echo "=== Installing dependencies ==="
-/venv/main/bin/pip install --quiet --upgrade pip
-/venv/main/bin/pip install --quiet \
+pip3 install --quiet --upgrade pip
+pip3 install --quiet \
     flask requests \
     opencv-python opencv-python-headless \
     accelerate transformers diffusers peft \
@@ -78,12 +78,17 @@ echo "=== Installing dependencies ==="
 
 echo "=== Dependencies installed ==="
 
-# Создаём worker.py с поддержкой API формата
+# Создаём worker.py с ИСПРАВЛЕННЫМ кодом
 cat > /workspace/ComfyUI/worker.py << 'EOF'
-import json, base64, time, os, requests
+import json
+import base64
+import time
+import os
+import requests
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
+COMFYUI_PORT = 8188  # ИСПРАВЛЕНО: правильный порт
 
 def convert_to_api_format(workflow_json):
     """Конвертирует стандартный workflow в API формат ComfyUI"""
@@ -91,6 +96,15 @@ def convert_to_api_format(workflow_json):
         return workflow_json
     
     api_workflow = {}
+    
+    # Сначала создаём словарь связей
+    links_map = {}
+    for link in workflow_json.get("links", []):
+        if len(link) >= 5:
+            link_id, from_node, from_output, to_node, to_input = link[:5]
+            key = (to_node, to_input)
+            links_map[key] = [str(from_node), from_output]
+    
     for node in workflow_json["nodes"]:
         node_id = str(node["id"])
         class_type = node.get("type")
@@ -108,20 +122,27 @@ def convert_to_api_format(workflow_json):
         
         # Добавляем widgets_values как inputs
         if node.get("widgets_values"):
-            inputs = {}
+            # Находим имена входов для этой ноды
             for i, val in enumerate(node["widgets_values"]):
-                inputs[f"input_{i}"] = val
-            api_workflow[node_id]["inputs"] = inputs
+                # Используем имя поля если есть, иначе widget_{i}
+                input_name = f"widget_{i}"
+                if node.get("inputs") and i < len(node["inputs"]):
+                    input_name = node["inputs"][i].get("name", input_name)
+                api_workflow[node_id]["inputs"][input_name] = val
         
-        # Обрабатываем связи (links)
+        # Обрабатываем связи
         for input_slot in node.get("inputs", []):
-            link = input_slot.get("link")
-            if link:
-                for link_data in workflow_json.get("links", []):
-                    if len(link_data) >= 5 and link_data[0] == link:
-                        target_node_id = str(link_data[1])
-                        target_output = link_data[2]
-                        api_workflow[node_id]["inputs"][input_slot["name"]] = [target_node_id, target_output]
+            slot_name = input_slot.get("name")
+            if not slot_name:
+                continue
+            
+            link_id = input_slot.get("link")
+            if link_id:
+                for link in workflow_json.get("links", []):
+                    if len(link) >= 5 and link[0] == link_id:
+                        from_node = str(link[1])
+                        from_output = link[2]
+                        api_workflow[node_id]["inputs"][slot_name] = [from_node, from_output]
                         break
     
     return api_workflow
@@ -153,16 +174,19 @@ def generate():
         
         print(f"📤 Отправка в ComfyUI: {len(api_workflow)} нод")
         
-        # Ждём ComfyUI
+        # Ждём ComfyUI (ИСПРАВЛЕНО: правильный порт)
         for _ in range(30):
             try:
-                requests.get('http://localhost:18188/', timeout=2)
+                requests.get(f'http://localhost:{COMFYUI_PORT}/', timeout=2)
+                print(f"✅ ComfyUI готов на порту {COMFYUI_PORT}")
                 break
             except:
                 time.sleep(1)
         
         # Отправляем в ComfyUI
-        resp = requests.post('http://localhost:18188/prompt', json={'prompt': api_workflow})
+        resp = requests.post(f'http://localhost:{COMFYUI_PORT}/prompt', 
+                           json={'prompt': api_workflow})
+        
         if resp.status_code != 200:
             return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
         
@@ -174,55 +198,72 @@ def generate():
         start = time.time()
         while time.time() - start < timeout:
             try:
-                resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
+                resp = requests.get(f'http://localhost:{COMFYUI_PORT}/history/{prompt_id}')
                 data = resp.json()
                 if data.get(prompt_id):
-                    outputs = data[prompt_id]['outputs']
+                    outputs = data[prompt_id].get('outputs', {})
                     for node_id, node_output in outputs.items():
-                        if 'videos' in node_output:
-                            video_filename = node_output['videos'][0]['filename']
-                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
-            except:
-                pass
+                        if 'videos' in node_output and node_output['videos']:
+                            video_filename = node_output['videos'][0].get('filename')
+                            if video_filename:
+                                video_url = f'http://localhost:{COMFYUI_PORT}/view?filename={video_filename}'
+                                print(f"✅ Видео готово: {video_filename}")
+                                return jsonify({'video_url': video_url})
+                        
+                        if 'images' in node_output and node_output['images']:
+                            # Если нет видео, но есть изображения
+                            print(f"⚠️ Найдены изображения: {len(node_output['images'])} шт")
+            except Exception as e:
+                print(f"⚠️ Ошибка проверки: {e}")
+            
             time.sleep(2)
         
         return jsonify({'error': 'Timeout waiting for video'}), 500
         
     except Exception as e:
         print(f"❌ Ошибка: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok'})
+
+@app.route('/', methods=['GET'])
+def index():
+    return jsonify({'status': 'worker running', 'comfyui_port': COMFYUI_PORT})
+
 if __name__ == '__main__':
-    print("Starting worker on port 8288...")
-    app.run(host='0.0.0.0', port=8288)
+    print(f"Starting worker on port 8288 (ComfyUI on port {COMFYUI_PORT})...")
+    app.run(host='0.0.0.0', port=8288, debug=False)
 EOF
 
-echo "=== Provisioning script finished ==="
-
-# Удаляем флаг
-rm -f /.provisioning
+echo "=== Worker script created ==="
 
 # Ждём ComfyUI
-echo "Waiting for ComfyUI to be ready..."
-for i in {1..30}; do
-    if curl -s http://localhost:18188/ > /dev/null 2>&1; then
-        echo "ComfyUI is ready!"
+echo "Waiting for ComfyUI to be ready on port 8188..."
+for i in {1..60}; do
+    if curl -s http://localhost:8188/ > /dev/null 2>&1; then
+        echo "✅ ComfyUI is ready!"
         break
     fi
+    echo "⏳ Waiting for ComfyUI... ($i/60)"
     sleep 2
 done
 
 # Запускаем worker на порту 8288
 cd /workspace/ComfyUI
-nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
+nohup python3 /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
 
-sleep 5
+sleep 10
 
 # Проверяем worker
-if curl -s http://localhost:8288/ > /dev/null 2>&1; then
+if curl -s http://localhost:8288/health > /dev/null 2>&1; then
     echo "✅ Worker started on port 8288"
 else
-    echo "⚠️ Worker may not be ready yet"
+    echo "⚠️ Worker may not be ready yet, check logs:"
+    tail -20 /workspace/worker.log
 fi
 
 echo "=== Provisioning complete ==="
