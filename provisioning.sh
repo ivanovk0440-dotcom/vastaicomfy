@@ -267,3 +267,50 @@ else
 fi
 
 echo "=== Provisioning complete ==="
+
+# Дополнительная диагностика
+echo "=== Running diagnostics ==="
+
+# Проверяем, что worker процесс запущен
+if pgrep -f "worker.py" > /dev/null; then
+    echo "✅ Worker process is running"
+else
+    echo "❌ Worker process is NOT running"
+    echo "Last 50 lines of worker.log:"
+    tail -50 /workspace/worker.log
+fi
+
+# Проверяем, что порт 8288 слушается
+if netstat -tlnp 2>/dev/null | grep -q ":8288"; then
+    echo "✅ Port 8288 is listening"
+    netstat -tlnp 2>/dev/null | grep ":8288"
+else
+    echo "❌ Port 8288 is NOT listening"
+fi
+
+# Проверяем доступность worker локально
+echo "Testing local worker connection..."
+for i in 1 2 3 4 5; do
+    if curl -s http://localhost:8288/health > /dev/null 2>&1; then
+        echo "✅ Worker responds to /health"
+        break
+    fi
+    echo "  Attempt $i/5 failed"
+    sleep 2
+done
+
+# Проверяем доступность ComfyUI
+echo "Testing ComfyUI connection..."
+if curl -s http://localhost:8188/system_stats > /dev/null 2>&1; then
+    echo "✅ ComfyUI is responding"
+else
+    echo "⚠️ ComfyUI may not be ready"
+fi
+
+# Выводим внешний IP и порты для информации
+echo ""
+echo "=== Instance Info ==="
+echo "External IP will be available from vastai show command"
+echo "Worker port: 8288"
+echo "ComfyUI port: 8188"
+echo "=== End of diagnostics ==="
