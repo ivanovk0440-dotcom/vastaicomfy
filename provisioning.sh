@@ -126,22 +126,18 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
 EOF
 
-echo "=== Provisioning script finished, waiting for ComfyUI to start ==="
+echo "=== Provisioning script finished ==="
 
-# Ждём пока provisioning флаг исчезнет (означает что всё установлено)
-while [ -f /.provisioning ]; do
-    echo "Waiting for provisioning to complete..."
-    sleep 5
-done
+# Даём время на запуск ComfyUI
+sleep 10
 
-# Ждём ComfyUI
+# Проверяем ComfyUI
 echo "Waiting for ComfyUI to be ready..."
 for i in {1..30}; do
     if curl -s http://localhost:18188/ > /dev/null 2>&1; then
         echo "ComfyUI is ready!"
         break
     fi
-    echo "Waiting for ComfyUI... ($i/30)"
     sleep 2
 done
 
@@ -150,12 +146,5 @@ cd /workspace/ComfyUI
 nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
 
 sleep 5
-
-# Проверяем worker
-if curl -s http://localhost:8080/ > /dev/null 2>&1; then
-    echo "✅ Worker started on port 8080"
-else
-    echo "⚠️ Worker may not be ready"
-fi
 
 echo "=== Provisioning complete ==="
