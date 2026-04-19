@@ -128,6 +128,9 @@ EOF
 
 echo "=== Provisioning script finished ==="
 
+# Принудительно удаляем флаг, чтобы ComfyUI запустился
+rm -f /.provisioning
+
 # Даём время на запуск ComfyUI
 sleep 10
 
