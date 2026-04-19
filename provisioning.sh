@@ -78,7 +78,7 @@ echo "=== Installing dependencies ==="
 
 echo "=== Dependencies installed ==="
 
-# Создаём worker.py на порту 8888 (свободный)
+# Создаём worker.py
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests
 from flask import Flask, request, jsonify
@@ -87,39 +87,54 @@ app = Flask(__name__)
 
 @app.route('/generate/sync', methods=['POST'])
 def generate():
-    data = request.json
-    workflow = data.get('workflow_json', {})
-    img_b64 = data.get('image_base64', '')
-    
-    os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
-    with open('/workspace/ComfyUI/input/temp.jpg', 'wb') as f:
-        f.write(base64.b64decode(img_b64))
-    
-    workflow['148']['widgets_values'][0] = 'temp.jpg'
-    
-    for _ in range(30):
-        try:
-            requests.get('http://localhost:18188/', timeout=2)
-            break
-        except:
-            time.sleep(1)
-    
-    resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
-    prompt_id = resp.json()['prompt_id']
-    
-    while True:
-        resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
-        if resp.json().get(prompt_id):
-            break
-        time.sleep(2)
-    
-    outputs = resp.json()[prompt_id]['outputs']
-    for node_id, node_output in outputs.items():
-        if 'videos' in node_output:
-            video = node_output['videos'][0]['filename']
-            return jsonify({'video_url': f'http://localhost:18188/view?filename={video}'})
-    
-    return jsonify({'error': 'Video not found'}), 404
+    try:
+        data = request.json
+        workflow = data.get('workflow_json', {})
+        img_b64 = data.get('image_base64', '')
+        
+        if not workflow or not img_b64:
+            return jsonify({'error': 'Missing workflow or image'}), 400
+        
+        os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
+        img_path = '/workspace/ComfyUI/input/temp.jpg'
+        with open(img_path, 'wb') as f:
+            f.write(base64.b64decode(img_b64))
+        
+        workflow['148']['widgets_values'][0] = 'temp.jpg'
+        
+        for i in range(30):
+            try:
+                requests.get('http://localhost:18188/', timeout=2)
+                break
+            except:
+                time.sleep(1)
+        
+        resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
+        if resp.status_code != 200:
+            return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
+        
+        prompt_id = resp.json()['prompt_id']
+        
+        timeout = 300
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
+                data = resp.json()
+                if data.get(prompt_id):
+                    outputs = data[prompt_id]['outputs']
+                    for node_id, node_output in outputs.items():
+                        if 'videos' in node_output:
+                            video_filename = node_output['videos'][0]['filename']
+                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
+            except:
+                pass
+            time.sleep(2)
+        
+        return jsonify({'error': 'Timeout waiting for video'}), 500
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("Starting worker on port 8888...")
@@ -128,7 +143,7 @@ EOF
 
 echo "=== Provisioning script finished ==="
 
-# Принудительно удаляем флаг
+# Удаляем флаг
 rm -f /.provisioning
 
 # Ждём ComfyUI
@@ -141,13 +156,13 @@ for i in {1..30}; do
     sleep 2
 done
 
-# Запускаем worker на порту 8888
+# Запускаем worker
 cd /workspace/ComfyUI
 nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
 
 sleep 5
 
-# Проверяем что worker запустился
+# Проверяем worker
 if curl -s http://localhost:8888/ > /dev/null 2>&1; then
     echo "✅ Worker started on port 8888"
 else
