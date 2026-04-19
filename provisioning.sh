@@ -78,7 +78,7 @@ echo "=== Installing dependencies ==="
 
 echo "=== Dependencies installed ==="
 
-# Создаём worker.py
+# Создаём worker.py на порту 8888 (свободный)
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests
 from flask import Flask, request, jsonify
@@ -122,19 +122,16 @@ def generate():
     return jsonify({'error': 'Video not found'}), 404
 
 if __name__ == '__main__':
-    print("Starting worker on port 8080...")
-    app.run(host='0.0.0.0', port=8080)
+    print("Starting worker on port 8888...")
+    app.run(host='0.0.0.0', port=8888)
 EOF
 
 echo "=== Provisioning script finished ==="
 
-# Принудительно удаляем флаг, чтобы ComfyUI запустился
+# Принудительно удаляем флаг
 rm -f /.provisioning
 
-# Даём время на запуск ComfyUI
-sleep 10
-
-# Проверяем ComfyUI
+# Ждём ComfyUI
 echo "Waiting for ComfyUI to be ready..."
 for i in {1..30}; do
     if curl -s http://localhost:18188/ > /dev/null 2>&1; then
@@ -144,10 +141,17 @@ for i in {1..30}; do
     sleep 2
 done
 
-# Запускаем worker
+# Запускаем worker на порту 8888
 cd /workspace/ComfyUI
 nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
 
 sleep 5
+
+# Проверяем что worker запустился
+if curl -s http://localhost:8888/ > /dev/null 2>&1; then
+    echo "✅ Worker started on port 8888"
+else
+    echo "⚠️ Worker may not be ready yet"
+fi
 
 echo "=== Provisioning complete ==="
