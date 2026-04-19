@@ -78,8 +78,8 @@ echo "=== Installing dependencies ==="
 
 echo "=== Dependencies installed ==="
 
-# Запускаем API worker на порту 8080 (который уже открыт)
-echo "=== Starting API worker on port 8080 ==="
+# СОЗДАЁМ И ЗАПУСКАЕМ WORKER АВТОМАТИЧЕСКИ
+echo "=== Creating and starting API worker on port 8080 ==="
 
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests
@@ -93,14 +93,12 @@ def generate():
     workflow = data.get('workflow_json', {})
     img_b64 = data.get('image_base64', '')
     
-    # Сохраняем картинку
     os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
     with open('/workspace/ComfyUI/input/temp.jpg', 'wb') as f:
         f.write(base64.b64decode(img_b64))
     
     workflow['148']['widgets_values'][0] = 'temp.jpg'
     
-    # Ждём ComfyUI
     for _ in range(30):
         try:
             requests.get('http://localhost:18188/', timeout=2)
@@ -108,18 +106,15 @@ def generate():
         except:
             time.sleep(1)
     
-    # Отправляем запрос
     resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
     prompt_id = resp.json()['prompt_id']
     
-    # Ждём результат
     while True:
         resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
         if resp.json().get(prompt_id):
             break
         time.sleep(2)
     
-    # Ищем видео
     outputs = resp.json()[prompt_id]['outputs']
     for node_id, node_output in outputs.items():
         if 'videos' in node_output:
@@ -129,11 +124,32 @@ def generate():
     return jsonify({'error': 'Video not found'}), 404
 
 if __name__ == '__main__':
+    print("Starting worker on port 8080...")
     app.run(host='0.0.0.0', port=8080)
 EOF
 
-# Запускаем worker на порту 8080
+# Ждём пока ComfyUI запустится
+echo "Waiting for ComfyUI to be ready..."
+for i in {1..60}; do
+    if curl -s http://localhost:18188/ > /dev/null 2>&1; then
+        echo "ComfyUI is ready!"
+        break
+    fi
+    echo "Waiting... ($i/60)"
+    sleep 2
+done
+
+# Запускаем worker в фоне
+cd /workspace/ComfyUI
 nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
-echo "=== API worker started on port 8080 ==="
+
+sleep 3
+
+# Проверяем что worker запустился
+if curl -s http://localhost:8080/ > /dev/null 2>&1; then
+    echo "✅ Worker successfully started on port 8080"
+else
+    echo "⚠️ Worker may not be ready yet, but continuing..."
+fi
 
 echo "=== Provisioning complete ==="
