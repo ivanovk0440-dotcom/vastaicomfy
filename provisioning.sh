@@ -4,8 +4,12 @@ set -e
 echo "=== Starting provisioning ==="
 cd /workspace/ComfyUI
 
-# Создаём папки
-mkdir -p models/diffusion_models models/text_encoders models/vae models/loras models/rife
+# Создаём папки для моделей
+mkdir -p models/diffusion_models
+mkdir -p models/text_encoders
+mkdir -p models/vae
+mkdir -p models/loras
+mkdir -p models/rife
 
 # 1. VAE
 echo "=== Downloading VAE ==="
@@ -74,11 +78,11 @@ echo "=== Installing dependencies ==="
 
 echo "=== Dependencies installed ==="
 
-# Запускаем worker в фоне (простой и надёжный)
-echo "=== Starting API worker on port 3000 ==="
+# Запускаем API worker на порту 8080 (который уже открыт)
+echo "=== Starting API worker on port 8080 ==="
 
 cat > /workspace/ComfyUI/worker.py << 'EOF'
-import json, base64, time, os, requests, threading
+import json, base64, time, os, requests
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -125,11 +129,11 @@ def generate():
     return jsonify({'error': 'Video not found'}), 404
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=3000)
+    app.run(host='0.0.0.0', port=8080)
 EOF
 
-# Запускаем
+# Запускаем worker на порту 8080
 nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
-echo "=== API worker started ==="
+echo "=== API worker started on port 8080 ==="
 
 echo "=== Provisioning complete ==="
