@@ -78,9 +78,7 @@ echo "=== Installing dependencies ==="
 
 echo "=== Dependencies installed ==="
 
-# СОЗДАЁМ И ЗАПУСКАЕМ WORKER АВТОМАТИЧЕСКИ
-echo "=== Creating and starting API worker on port 8080 ==="
-
+# Создаём worker.py
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests
 from flask import Flask, request, jsonify
@@ -128,28 +126,36 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
 EOF
 
-# Ждём пока ComfyUI запустится
+echo "=== Provisioning script finished, waiting for ComfyUI to start ==="
+
+# Ждём пока provisioning флаг исчезнет (означает что всё установлено)
+while [ -f /.provisioning ]; do
+    echo "Waiting for provisioning to complete..."
+    sleep 5
+done
+
+# Ждём ComfyUI
 echo "Waiting for ComfyUI to be ready..."
-for i in {1..60}; do
+for i in {1..30}; do
     if curl -s http://localhost:18188/ > /dev/null 2>&1; then
         echo "ComfyUI is ready!"
         break
     fi
-    echo "Waiting... ($i/60)"
+    echo "Waiting for ComfyUI... ($i/30)"
     sleep 2
 done
 
-# Запускаем worker в фоне
+# Запускаем worker
 cd /workspace/ComfyUI
 nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
 
-sleep 3
+sleep 5
 
-# Проверяем что worker запустился
+# Проверяем worker
 if curl -s http://localhost:8080/ > /dev/null 2>&1; then
-    echo "✅ Worker successfully started on port 8080"
+    echo "✅ Worker started on port 8080"
 else
-    echo "⚠️ Worker may not be ready yet, but continuing..."
+    echo "⚠️ Worker may not be ready"
 fi
 
 echo "=== Provisioning complete ==="
