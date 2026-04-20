@@ -143,7 +143,7 @@ echo "=== Installing other dependencies ==="
 /venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
 /venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
 
-# Создаём worker.py с ПРАВИЛЬНОЙ конвертацией в API формат
+# Создаём worker.py с ПРАВИЛЬНОЙ конвертацией и поиском видео
 echo "=== Creating worker.py with API format support ==="
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests
@@ -247,12 +247,31 @@ def generate():
                 data = resp.json()
                 if data.get(prompt_id):
                     outputs = data[prompt_id]['outputs']
+                    print(f"📦 Outputs: {list(outputs.keys())}")
+                    
+                    # Ищем видео в outputs
                     for node_id, node_output in outputs.items():
+                        print(f"  Node {node_id}: {list(node_output.keys())}")
+                        
+                        # Пробуем разные варианты названий
                         if 'videos' in node_output and node_output['videos']:
                             video_filename = node_output['videos'][0]['filename']
                             return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
-            except:
-                pass
+                        
+                        if 'video' in node_output and node_output['video']:
+                            video_filename = node_output['video'][0]['filename']
+                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
+                        
+                        if 'images' in node_output and node_output['images']:
+                            # Может быть видео сохранено как изображения
+                            video_filename = node_output['images'][0]['filename']
+                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
+                    
+                    # Если нашли prompt_id, но видео не нашли
+                    print(f"⚠️ Видео не найдено в outputs")
+                    return jsonify({'error': 'Video not found in outputs'}), 500
+            except Exception as e:
+                print(f"⚠️ Ошибка при проверке: {e}")
             time.sleep(2)
         
         return jsonify({'error': 'Timeout waiting for video'}), 500
