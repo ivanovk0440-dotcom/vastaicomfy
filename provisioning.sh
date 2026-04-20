@@ -143,8 +143,8 @@ echo "=== Installing other dependencies ==="
 /venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
 /venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
 
-# Создаём УПРОЩЁННЫЙ worker.py (без конвертации)
-echo "=== Creating simplified worker.py ==="
+# Создаём worker.py с отладкой
+echo "=== Creating worker.py with debug ==="
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests
 from flask import Flask, request, jsonify
@@ -185,7 +185,7 @@ def generate():
             except:
                 time.sleep(1)
         
-        # Отправляем workflow в оригинальном формате
+        # Отправляем workflow
         resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
         if resp.status_code != 200:
             return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
@@ -200,20 +200,32 @@ def generate():
             try:
                 resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
                 data = resp.json()
+                
                 if data.get(prompt_id):
                     outputs = data[prompt_id]['outputs']
+                    print(f"=== OUTPUTS ===")
                     for node_id, node_output in outputs.items():
-                        if 'videos' in node_output and node_output['videos']:
+                        print(f"Node {node_id}: {list(node_output.keys())}")
+                        if 'videos' in node_output:
+                            print(f"  VIDEO in {node_id}: {node_output['videos']}")
                             video_filename = node_output['videos'][0]['filename']
                             return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
-            except:
-                pass
+                        if 'images' in node_output:
+                            print(f"  IMAGES in {node_id}: {len(node_output['images'])}")
+                    print(f"=== END OUTPUTS ===")
+                    # Если видео не найдено, но есть outputs, возможно оно в другом месте
+                    if outputs:
+                        return jsonify({'error': 'Video not found in outputs', 'outputs_keys': list(outputs.keys())}), 500
+            except Exception as e:
+                print(f"Error checking: {e}")
             time.sleep(2)
         
         return jsonify({'error': 'Timeout waiting for video'}), 500
         
     except Exception as e:
         print(f"❌ Ошибка: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
