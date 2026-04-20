@@ -109,11 +109,11 @@ fi
 echo "=== Custom nodes installed ==="
 
 # ============================================
-# КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Совместимый PyTorch для старых драйверов
+# PyTorch для CUDA 12.6+
 # ============================================
-echo "=== Installing PyTorch for old drivers (CUDA 11.8) ==="
+echo "=== Installing PyTorch for CUDA 12.6+ ==="
 /venv/main/bin/pip uninstall torch torchvision torchaudio -y
-/venv/main/bin/pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+/venv/main/bin/pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 
 # Остальные зависимости
 echo "=== Installing other dependencies ==="
@@ -139,6 +139,7 @@ echo "=== Installing other dependencies ==="
 
 # Проверяем
 /venv/main/bin/python -c "import torch; print(f'✅ PyTorch {torch.__version__} OK')"
+/venv/main/bin/python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
 /venv/main/bin/python -c "import cv2; print('✅ OpenCV OK')"
 /venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
 /venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
@@ -187,28 +188,7 @@ EOF
 
 /venv/main/bin/python /tmp/fix_nodes.py
 
-# Удаляем флаг provisioning
-rm -f /.provisioning 2>/dev/null || true
-
-# Перезапускаем ComfyUI
-echo "=== Restarting ComfyUI ==="
-supervisorctl restart comfyui
-
-# Ждём запуска ComfyUI
-echo "Waiting for ComfyUI to start..."
-for i in {1..60}; do
-    if curl -s http://localhost:18188/ > /dev/null 2>&1; then
-        echo "✅ ComfyUI is running on port 18188!"
-        break
-    fi
-    if curl -s http://localhost:8188/ > /dev/null 2>&1; then
-        echo "✅ ComfyUI is running on port 8188!"
-        break
-    fi
-    sleep 2
-done
-
-# Создаём worker.py с правильным портом
+# Создаём worker.py
 echo "=== Creating worker.py ==="
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests
@@ -216,23 +196,8 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Пробуем оба порта
-COMFYUI_PORTS = [18188, 8188]
-COMFYUI_URL = None
-
-for port in COMFYUI_PORTS:
-    try:
-        resp = requests.get(f'http://localhost:{port}/', timeout=2)
-        if resp.status_code == 200:
-            COMFYUI_URL = f'http://localhost:{port}'
-            print(f"✅ ComfyUI найден на порту {port}")
-            break
-    except:
-        pass
-
-if not COMFYUI_URL:
-    COMFYUI_URL = 'http://localhost:18188'
-    print(f"⚠️ Используем порт по умолчанию: 18188")
+COMFYUI_PORT = 18188
+COMFYUI_URL = f"http://localhost:{COMFYUI_PORT}"
 
 @app.route('/generate/sync', methods=['POST'])
 def generate():
@@ -248,19 +213,16 @@ def generate():
         if not workflow or not img_b64:
             return jsonify({'error': 'Missing workflow or image'}), 400
         
-        # Сохраняем картинку
         os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
         img_path = '/workspace/ComfyUI/input/temp.jpg'
         with open(img_path, 'wb') as f:
             f.write(base64.b64decode(img_b64))
         
-        # Обновляем ноду LoadImage (148)
         if "148" in workflow:
             if "inputs" not in workflow["148"]:
                 workflow["148"]["inputs"] = {}
             workflow["148"]["inputs"]["image"] = "temp.jpg"
         
-        # Ждём ComfyUI
         for i in range(60):
             try:
                 requests.get(f'{COMFYUI_URL}/', timeout=2)
@@ -270,7 +232,6 @@ def generate():
                 pass
             time.sleep(1)
         
-        # Отправляем запрос
         resp = requests.post(f'{COMFYUI_URL}/prompt', json={'prompt': workflow})
         if resp.status_code != 200:
             return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
@@ -278,7 +239,6 @@ def generate():
         prompt_id = resp.json()['prompt_id']
         print(f"✅ Prompt ID: {prompt_id}")
         
-        # Ждём результат
         timeout = 300
         start = time.time()
         while time.time() - start < timeout:
@@ -287,12 +247,19 @@ def generate():
                 data = resp.json()
                 if data.get(prompt_id):
                     outputs = data[prompt_id]['outputs']
+                    print(f"=== OUTPUTS ===")
                     for node_id, node_output in outputs.items():
+                        print(f"Node {node_id}: {list(node_output.keys())}")
                         if 'videos' in node_output and node_output['videos']:
                             video_filename = node_output['videos'][0]['filename']
                             return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
-            except:
-                pass
+                        if 'video' in node_output and node_output['video']:
+                            video_filename = node_output['video'][0]['filename']
+                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
+                    print(f"=== END OUTPUTS ===")
+                    return jsonify({'error': 'Video not found in outputs'}), 500
+            except Exception as e:
+                print(f"Error: {e}")
             time.sleep(2)
         
         return jsonify({'error': 'Timeout waiting for video'}), 500
@@ -307,6 +274,23 @@ if __name__ == '__main__':
     print(f"Starting worker on port 8288, ComfyUI at {COMFYUI_URL}")
     app.run(host='0.0.0.0', port=8288)
 EOF
+
+# Удаляем флаг provisioning
+rm -f /.provisioning 2>/dev/null || true
+
+# Перезапускаем ComfyUI
+echo "=== Restarting ComfyUI ==="
+supervisorctl restart comfyui
+
+# Ждём запуска ComfyUI
+echo "Waiting for ComfyUI to start..."
+for i in {1..30}; do
+    if curl -s http://localhost:18188/ > /dev/null 2>&1; then
+        echo "✅ ComfyUI is running on port 18188!"
+        break
+    fi
+    sleep 2
+done
 
 # Запускаем worker
 cd /workspace/ComfyUI
