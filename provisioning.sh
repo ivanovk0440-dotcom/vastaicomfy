@@ -143,58 +143,18 @@ echo "=== Installing other dependencies ==="
 /venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
 /venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
 
-# Создаём worker.py с ПРАВИЛЬНОЙ конвертацией и поиском видео
-echo "=== Creating worker.py with API format support ==="
+# Создаём УПРОЩЁННЫЙ worker.py (без конвертации)
+echo "=== Creating simplified worker.py ==="
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-def workflow_to_api_format(workflow_json):
-    """Конвертирует стандартный workflow в API формат ComfyUI"""
-    if "nodes" not in workflow_json:
-        return workflow_json
-    
-    api_workflow = {}
-    for node in workflow_json["nodes"]:
-        node_id = str(node["id"])
-        class_type = node.get("type")
-        
-        if not class_type:
-            continue
-        
-        api_workflow[node_id] = {
-            "class_type": class_type,
-            "inputs": {}
-        }
-        
-        if node.get("title"):
-            api_workflow[node_id]["_meta"] = {"title": node["title"]}
-        
-        # Добавляем widgets_values как inputs
-        if node.get("widgets_values"):
-            for i, val in enumerate(node["widgets_values"]):
-                api_workflow[node_id]["inputs"][f"input_{i}"] = val
-        
-        # Обрабатываем связи (links)
-        for input_slot in node.get("inputs", []):
-            link = input_slot.get("link")
-            if link:
-                for link_data in workflow_json.get("links", []):
-                    if len(link_data) >= 5 and link_data[0] == link:
-                        target_node_id = str(link_data[1])
-                        target_output = link_data[2]
-                        api_workflow[node_id]["inputs"][input_slot["name"]] = [target_node_id, target_output]
-                        break
-    
-    return api_workflow
-
 @app.route('/generate/sync', methods=['POST'])
 def generate():
     try:
         data = request.json
-        # Поддерживаем оба формата: прямой и с обёрткой input
         if "input" in data:
             workflow = data["input"].get("workflow_json", {})
             img_b64 = data["input"].get("image_base64", "")
@@ -217,11 +177,6 @@ def generate():
                 node["widgets_values"][0] = "temp.jpg"
                 break
         
-        # Конвертируем в API формат
-        api_workflow = workflow_to_api_format(workflow)
-        
-        print(f"📤 Отправка в ComfyUI: {len(api_workflow)} нод")
-        
         # Ждём ComfyUI
         for _ in range(30):
             try:
@@ -230,8 +185,8 @@ def generate():
             except:
                 time.sleep(1)
         
-        # Отправляем в ComfyUI
-        resp = requests.post('http://localhost:18188/prompt', json={'prompt': api_workflow})
+        # Отправляем workflow в оригинальном формате
+        resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
         if resp.status_code != 200:
             return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
         
@@ -247,31 +202,12 @@ def generate():
                 data = resp.json()
                 if data.get(prompt_id):
                     outputs = data[prompt_id]['outputs']
-                    print(f"📦 Outputs: {list(outputs.keys())}")
-                    
-                    # Ищем видео в outputs
                     for node_id, node_output in outputs.items():
-                        print(f"  Node {node_id}: {list(node_output.keys())}")
-                        
-                        # Пробуем разные варианты названий
                         if 'videos' in node_output and node_output['videos']:
                             video_filename = node_output['videos'][0]['filename']
                             return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
-                        
-                        if 'video' in node_output and node_output['video']:
-                            video_filename = node_output['video'][0]['filename']
-                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
-                        
-                        if 'images' in node_output and node_output['images']:
-                            # Может быть видео сохранено как изображения
-                            video_filename = node_output['images'][0]['filename']
-                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
-                    
-                    # Если нашли prompt_id, но видео не нашли
-                    print(f"⚠️ Видео не найдено в outputs")
-                    return jsonify({'error': 'Video not found in outputs'}), 500
-            except Exception as e:
-                print(f"⚠️ Ошибка при проверке: {e}")
+            except:
+                pass
             time.sleep(2)
         
         return jsonify({'error': 'Timeout waiting for video'}), 500
