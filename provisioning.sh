@@ -108,13 +108,17 @@ fi
 
 echo "=== Custom nodes installed ==="
 
-# Устанавливаем зависимости в ВИРТУАЛЬНОЕ ОКРУЖЕНИЕ ComfyUI
-echo "=== Installing dependencies in venv ==="
+# ============================================
+# КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Совместимый PyTorch для старых драйверов
+# ============================================
+echo "=== Installing PyTorch for old drivers (CUDA 11.8) ==="
+/venv/main/bin/pip uninstall torch torchvision torchaudio -y
+/venv/main/bin/pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu118
+
+# Остальные зависимости
+echo "=== Installing other dependencies ==="
 /venv/main/bin/pip install --upgrade pip
-/venv/main/bin/pip install --force-reinstall \
-    torch \
-    torchvision \
-    torchaudio \
+/venv/main/bin/pip install \
     accelerate \
     transformers \
     diffusers \
@@ -130,19 +134,14 @@ echo "=== Installing dependencies in venv ==="
     numba \
     scipy \
     imageio \
-    imageio-ffmpeg
-
-# Специально для RIFE VFI
-/venv/main/bin/pip install torchvision --upgrade
-
-# Для MathExpression (Custom Scripts)
-/venv/main/bin/pip install numexpr
+    imageio-ffmpeg \
+    numexpr
 
 # Проверяем
+/venv/main/bin/python -c "import torch; print(f'✅ PyTorch {torch.__version__} OK')"
 /venv/main/bin/python -c "import cv2; print('✅ OpenCV OK')"
 /venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
 /venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
-/venv/main/bin/python -c "import numexpr; print('✅ NumExpr OK')"
 
 # Создаём конфиг для Manager
 mkdir -p custom_nodes/ComfyUI-Manager
@@ -150,23 +149,15 @@ cat > custom_nodes/ComfyUI-Manager/config.ini << 'EOF'
 [default]
 security_level = weak
 git_check = False
-channel_url = https://raw.githubusercontent.com/ltdrdata/ComfyUI-Manager/main/
 EOF
 
-# АВТОМАТИЧЕСКИЙ FIX для сломанных нод
+# Автоматический фикс нод
 echo "=== Running auto-fix for nodes ==="
-
-# Создаём скрипт для фикса
 cat > /tmp/fix_nodes.py << 'EOF'
 import os
-import sys
-import json
 import shutil
 
-# Путь к папке custom_nodes
 custom_nodes_path = "/workspace/ComfyUI/custom_nodes"
-
-# Список нод, которые требуют фикса
 nodes_to_fix = [
     "ComfyUI-Custom-Scripts",
     "ComfyUI-WanVideoWrapper",
@@ -178,27 +169,22 @@ nodes_to_fix = [
 for node in nodes_to_fix:
     node_path = os.path.join(custom_nodes_path, node)
     if os.path.exists(node_path):
-        # Создаём __init__.py если нет
         init_file = os.path.join(node_path, "__init__.py")
         if not os.path.exists(init_file):
             with open(init_file, "w") as f:
                 f.write("# Auto-generated\n")
             print(f"✅ Created __init__.py for {node}")
         
-        # Удаляем .pyc кэш
         for root, dirs, files in os.walk(node_path):
             for file in files:
                 if file.endswith(".pyc"):
                     os.remove(os.path.join(root, file))
             if "__pycache__" in dirs:
                 shutil.rmtree(os.path.join(root, "__pycache__"), ignore_errors=True)
-        
         print(f"✅ Fixed {node}")
-
 print("✅ Auto-fix completed")
 EOF
 
-# Запускаем фикс
 /venv/main/bin/python /tmp/fix_nodes.py
 
 # Удаляем флаг provisioning
@@ -217,17 +203,5 @@ for i in {1..30}; do
     fi
     sleep 2
 done
-
-# Автоматический "Try Fix" через API Manager
-echo "=== Running ComfyUI Manager fix ==="
-sleep 5
-
-# Отправляем запрос на фикс через API Manager
-curl -X POST http://localhost:8188/manager/fix_nodes 2>/dev/null || true
-
-# Перезапускаем ещё раз после фикса
-supervisorctl restart comfyui
-
-sleep 10
 
 echo "=== Provisioning complete ==="
