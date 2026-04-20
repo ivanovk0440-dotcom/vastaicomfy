@@ -213,16 +213,19 @@ def generate():
         if not workflow or not img_b64:
             return jsonify({'error': 'Missing workflow or image'}), 400
         
+        # Сохраняем картинку
         os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
         img_path = '/workspace/ComfyUI/input/temp.jpg'
         with open(img_path, 'wb') as f:
             f.write(base64.b64decode(img_b64))
         
+        # Обновляем ноду LoadImage (148)
         if "148" in workflow:
             if "inputs" not in workflow["148"]:
                 workflow["148"]["inputs"] = {}
             workflow["148"]["inputs"]["image"] = "temp.jpg"
         
+        # Ждём ComfyUI
         for i in range(60):
             try:
                 requests.get(f'{COMFYUI_URL}/', timeout=2)
@@ -232,6 +235,7 @@ def generate():
                 pass
             time.sleep(1)
         
+        # Отправляем запрос
         resp = requests.post(f'{COMFYUI_URL}/prompt', json={'prompt': workflow})
         if resp.status_code != 200:
             return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
@@ -239,6 +243,7 @@ def generate():
         prompt_id = resp.json()['prompt_id']
         print(f"✅ Prompt ID: {prompt_id}")
         
+        # Ждём результат
         timeout = 300
         start = time.time()
         while time.time() - start < timeout:
@@ -247,16 +252,24 @@ def generate():
                 data = resp.json()
                 if data.get(prompt_id):
                     outputs = data[prompt_id]['outputs']
-                    print(f"=== OUTPUTS ===")
+                    print(f"=== ВСЕ OUTPUTS ===")
+                    print(json.dumps(outputs, indent=2))
+                    print(f"==================")
+                    
                     for node_id, node_output in outputs.items():
-                        print(f"Node {node_id}: {list(node_output.keys())}")
                         if 'videos' in node_output and node_output['videos']:
                             video_filename = node_output['videos'][0]['filename']
                             return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
                         if 'video' in node_output and node_output['video']:
                             video_filename = node_output['video'][0]['filename']
                             return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
-                    print(f"=== END OUTPUTS ===")
+                        if 'images' in node_output and node_output['images']:
+                            print(f"  Найдены images в ноде {node_id}: {len(node_output['images'])}")
+                            # Возможно видео сохранено как images
+                            image_filename = node_output['images'][0]['filename']
+                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={image_filename}'})
+                    
+                    print("⚠️ Видео не найдено в outputs")
                     return jsonify({'error': 'Video not found in outputs'}), 500
             except Exception as e:
                 print(f"Error: {e}")
@@ -273,7 +286,6 @@ def generate():
 if __name__ == '__main__':
     print(f"Starting worker on port 8288, ComfyUI at {COMFYUI_URL}")
     app.run(host='0.0.0.0', port=8288)
-EOF
 
 # Удаляем флаг provisioning
 rm -f /.provisioning 2>/dev/null || true
