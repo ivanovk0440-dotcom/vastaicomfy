@@ -151,6 +151,10 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
+# Определяем порт ComfyUI
+COMFYUI_PORT = os.environ.get('COMFYUI_PORT', '8188')
+COMFYUI_URL = f"http://127.0.0.1:{COMFYUI_PORT}"
+
 @app.route('/generate/sync', methods=['POST'])
 def generate():
     try:
@@ -180,13 +184,13 @@ def generate():
         # Ждём ComfyUI
         for _ in range(30):
             try:
-                requests.get('http://localhost:18188/', timeout=2)
+                requests.get(f'{COMFYUI_URL}/', timeout=2)
                 break
             except:
                 time.sleep(1)
         
         # Отправляем workflow в ComfyUI
-        resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
+        resp = requests.post(f'{COMFYUI_URL}/prompt', json={'prompt': workflow})
         if resp.status_code != 200:
             return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
         
@@ -198,7 +202,7 @@ def generate():
         start = time.time()
         while time.time() - start < timeout:
             try:
-                resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
+                resp = requests.get(f'{COMFYUI_URL}/history/{prompt_id}')
                 data = resp.json()
                 
                 if data.get(prompt_id):
@@ -207,19 +211,15 @@ def generate():
                     for node_id, node_output in outputs.items():
                         print(f"Node {node_id}: {list(node_output.keys())}")
                         if 'videos' in node_output and node_output['videos']:
-                            print(f"  VIDEO in {node_id}: {node_output['videos']}")
                             video_filename = node_output['videos'][0]['filename']
-                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
+                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
                         if 'video' in node_output and node_output['video']:
-                            print(f"  VIDEO in {node_id}: {node_output['video']}")
                             video_filename = node_output['video'][0]['filename']
-                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
+                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
                         if 'images' in node_output and node_output['images']:
                             print(f"  IMAGES in {node_id}: {len(node_output['images'])}")
                     print(f"=== END OUTPUTS ===")
-                    
-                    # Если нашли prompt_id, но видео нет
-                    return jsonify({'error': 'Video not found in outputs', 'outputs_keys': list(outputs.keys())}), 500
+                    return jsonify({'error': 'Video not found in outputs'}), 500
             except Exception as e:
                 print(f"Error checking: {e}")
             time.sleep(2)
@@ -233,7 +233,7 @@ def generate():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    print("Starting worker on port 8288...")
+    print(f"Starting worker on port 8288, ComfyUI at {COMFYUI_URL}")
     app.run(host='0.0.0.0', port=8288)
 EOF
 
