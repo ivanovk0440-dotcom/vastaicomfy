@@ -143,100 +143,6 @@ echo "=== Installing other dependencies ==="
 /venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
 /venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
 
-# Создаём worker.py для API-формата
-echo "=== Creating worker.py for API format ==="
-cat > /workspace/ComfyUI/worker.py << 'EOF'
-import json, base64, time, os, requests
-from flask import Flask, request, jsonify
-
-app = Flask(__name__)
-
-# Определяем порт ComfyUI
-COMFYUI_PORT = os.environ.get('COMFYUI_PORT', '8188')
-COMFYUI_URL = f"http://127.0.0.1:{COMFYUI_PORT}"
-
-@app.route('/generate/sync', methods=['POST'])
-def generate():
-    try:
-        data = request.json
-        if "input" in data:
-            workflow = data["input"].get("workflow_json", {})
-            img_b64 = data["input"].get("image_base64", "")
-        else:
-            workflow = data.get("workflow_json", {})
-            img_b64 = data.get("image_base64", "")
-        
-        if not workflow or not img_b64:
-            return jsonify({'error': 'Missing workflow or image'}), 400
-        
-        # Сохраняем картинку
-        os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
-        img_path = '/workspace/ComfyUI/input/temp.jpg'
-        with open(img_path, 'wb') as f:
-            f.write(base64.b64decode(img_b64))
-        
-        # Обновляем ноду LoadImage (148) в API-формате
-        if "148" in workflow:
-            if "inputs" not in workflow["148"]:
-                workflow["148"]["inputs"] = {}
-            workflow["148"]["inputs"]["image"] = "temp.jpg"
-        
-        # Ждём ComfyUI
-        for _ in range(30):
-            try:
-                requests.get(f'{COMFYUI_URL}/', timeout=2)
-                break
-            except:
-                time.sleep(1)
-        
-        # Отправляем workflow в ComfyUI
-        resp = requests.post(f'{COMFYUI_URL}/prompt', json={'prompt': workflow})
-        if resp.status_code != 200:
-            return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
-        
-        prompt_id = resp.json()['prompt_id']
-        print(f"✅ Prompt ID: {prompt_id}")
-        
-        # Ждём результат
-        timeout = 300
-        start = time.time()
-        while time.time() - start < timeout:
-            try:
-                resp = requests.get(f'{COMFYUI_URL}/history/{prompt_id}')
-                data = resp.json()
-                
-                if data.get(prompt_id):
-                    outputs = data[prompt_id]['outputs']
-                    print(f"=== OUTPUTS ===")
-                    for node_id, node_output in outputs.items():
-                        print(f"Node {node_id}: {list(node_output.keys())}")
-                        if 'videos' in node_output and node_output['videos']:
-                            video_filename = node_output['videos'][0]['filename']
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
-                        if 'video' in node_output and node_output['video']:
-                            video_filename = node_output['video'][0]['filename']
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
-                        if 'images' in node_output and node_output['images']:
-                            print(f"  IMAGES in {node_id}: {len(node_output['images'])}")
-                    print(f"=== END OUTPUTS ===")
-                    return jsonify({'error': 'Video not found in outputs'}), 500
-            except Exception as e:
-                print(f"Error checking: {e}")
-            time.sleep(2)
-        
-        return jsonify({'error': 'Timeout waiting for video'}), 500
-        
-    except Exception as e:
-        print(f"❌ Ошибка: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
-    print(f"Starting worker on port 8288, ComfyUI at {COMFYUI_URL}")
-    app.run(host='0.0.0.0', port=8288)
-EOF
-
 # Создаём конфиг для Manager
 mkdir -p custom_nodes/ComfyUI-Manager
 cat > custom_nodes/ComfyUI-Manager/config.ini << 'EOF'
@@ -297,11 +203,5 @@ for i in {1..30}; do
     fi
     sleep 2
 done
-
-# Запускаем worker
-cd /workspace/ComfyUI
-nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
-
-sleep 5
 
 echo "=== Provisioning complete ==="
