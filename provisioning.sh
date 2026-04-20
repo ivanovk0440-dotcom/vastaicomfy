@@ -143,8 +143,8 @@ echo "=== Installing other dependencies ==="
 /venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
 /venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
 
-# Создаём worker.py с отладкой
-echo "=== Creating worker.py with debug ==="
+# Создаём worker.py для API-формата
+echo "=== Creating worker.py for API format ==="
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests
 from flask import Flask, request, jsonify
@@ -171,11 +171,11 @@ def generate():
         with open(img_path, 'wb') as f:
             f.write(base64.b64decode(img_b64))
         
-        # Обновляем ноду LoadImage (148)
-        for node in workflow.get("nodes", []):
-            if node.get("id") == 148:
-                node["widgets_values"][0] = "temp.jpg"
-                break
+        # Обновляем ноду LoadImage (148) в API-формате
+        if "148" in workflow:
+            if "inputs" not in workflow["148"]:
+                workflow["148"]["inputs"] = {}
+            workflow["148"]["inputs"]["image"] = "temp.jpg"
         
         # Ждём ComfyUI
         for _ in range(30):
@@ -185,7 +185,7 @@ def generate():
             except:
                 time.sleep(1)
         
-        # Отправляем workflow
+        # Отправляем workflow в ComfyUI
         resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
         if resp.status_code != 200:
             return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
@@ -206,16 +206,20 @@ def generate():
                     print(f"=== OUTPUTS ===")
                     for node_id, node_output in outputs.items():
                         print(f"Node {node_id}: {list(node_output.keys())}")
-                        if 'videos' in node_output:
+                        if 'videos' in node_output and node_output['videos']:
                             print(f"  VIDEO in {node_id}: {node_output['videos']}")
                             video_filename = node_output['videos'][0]['filename']
                             return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
-                        if 'images' in node_output:
+                        if 'video' in node_output and node_output['video']:
+                            print(f"  VIDEO in {node_id}: {node_output['video']}")
+                            video_filename = node_output['video'][0]['filename']
+                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
+                        if 'images' in node_output and node_output['images']:
                             print(f"  IMAGES in {node_id}: {len(node_output['images'])}")
                     print(f"=== END OUTPUTS ===")
-                    # Если видео не найдено, но есть outputs, возможно оно в другом месте
-                    if outputs:
-                        return jsonify({'error': 'Video not found in outputs', 'outputs_keys': list(outputs.keys())}), 500
+                    
+                    # Если нашли prompt_id, но видео нет
+                    return jsonify({'error': 'Video not found in outputs', 'outputs_keys': list(outputs.keys())}), 500
             except Exception as e:
                 print(f"Error checking: {e}")
             time.sleep(2)
