@@ -204,11 +204,18 @@ mkdir -p /workspace/ComfyUI/output/video
 rm -rf /workspace/ComfyUI/input
 mkdir -p /workspace/ComfyUI/input
 
-# Создаём worker.py (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+# Создаём worker.py (ИСПРАВЛЕННАЯ ВЕРСИЯ v2)
 echo "=== Creating worker.py ==="
 cat > /workspace/ComfyUI/worker.py << 'EOF'
-import json, base64, time, os, requests, glob
+import json
+import base64
+import time
+import os
+import requests
+import glob
 from flask import Flask, request, jsonify
+from PIL import Image
+import io
 
 app = Flask(__name__)
 
@@ -234,16 +241,25 @@ def generate():
         if os.path.exists(input_dir) and not os.path.isdir(input_dir):
             os.remove(input_dir)
         os.makedirs(input_dir, exist_ok=True)
-        img_path = os.path.join(input_dir, 'temp.jpg')
-        with open(img_path, 'wb') as f:
-            f.write(base64.b64decode(img_b64))
-        print(f"✅ Image saved: {img_path}")
         
-        # Обновляем ноду LoadImage (148)
+        # Декодируем base64 и сохраняем через PIL
+        img_data = base64.b64decode(img_b64)
+        img = Image.open(io.BytesIO(img_data))
+        img_path = os.path.join(input_dir, 'temp.jpg')
+        img.save(img_path, 'JPEG', quality=95)
+        print(f"✅ Image saved: {img_path} ({os.path.getsize(img_path)} bytes)")
+        
+        # Обновляем ноду LoadImage (148) - ТОЛЬКО ИМЯ ФАЙЛА
         if "148" in workflow:
             if "inputs" not in workflow["148"]:
                 workflow["148"]["inputs"] = {}
             workflow["148"]["inputs"]["image"] = "temp.jpg"
+            # Убираем upload, если есть
+            if "upload" in workflow["148"]["inputs"]:
+                del workflow["148"]["inputs"]["upload"]
+            print(f"✅ Updated node 148 with image: temp.jpg")
+        else:
+            print("⚠️ Node 148 not found in workflow")
         
         # Ждём ComfyUI
         for i in range(60):
