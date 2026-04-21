@@ -106,6 +106,14 @@ if [ ! -d "ComfyUI-Easy-Use" ]; then
     cd ..
 fi
 
+# VideoHelperSuite (нужен для CreateVideo)
+if [ ! -d "ComfyUI-VideoHelperSuite" ]; then
+    git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git
+    cd ComfyUI-VideoHelperSuite
+    /venv/main/bin/pip install -r requirements.txt 2>/dev/null || true
+    cd ..
+fi
+
 echo "=== Custom nodes installed ==="
 
 # ============================================
@@ -164,7 +172,8 @@ nodes_to_fix = [
     "ComfyUI-WanVideoWrapper",
     "ComfyUI-KJNodes",
     "ComfyUI-Frame-Interpolation",
-    "ComfyUI-Easy-Use"
+    "ComfyUI-Easy-Use",
+    "ComfyUI-VideoHelperSuite"
 ]
 
 for node in nodes_to_fix:
@@ -188,10 +197,13 @@ EOF
 
 /venv/main/bin/python /tmp/fix_nodes.py
 
+# Создаём папку для видео
+mkdir -p /workspace/ComfyUI/output/video
+
 # Создаём worker.py
 echo "=== Creating worker.py ==="
 cat > /workspace/ComfyUI/worker.py << 'EOF'
-import json, base64, time, os, requests
+import json, base64, time, os, requests, glob
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -244,7 +256,7 @@ def generate():
         print(f"✅ Prompt ID: {prompt_id}")
         
         # Ждём результат
-        timeout = 300
+        timeout = 600
         start = time.time()
         while time.time() - start < timeout:
             try:
@@ -259,18 +271,40 @@ def generate():
                     for node_id, node_output in outputs.items():
                         if 'videos' in node_output and node_output['videos']:
                             video_filename = node_output['videos'][0]['filename']
+                            subfolder = node_output['videos'][0].get('subfolder', '')
+                            if subfolder:
+                                return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
                             return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
                         if 'video' in node_output and node_output['video']:
                             video_filename = node_output['video'][0]['filename']
+                            subfolder = node_output['video'][0].get('subfolder', '')
+                            if subfolder:
+                                return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
                             return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
                         if 'images' in node_output and node_output['images']:
                             print(f"  Найдены images в ноде {node_id}: {len(node_output['images'])}")
-                            # Возможно видео сохранено как images
                             image_filename = node_output['images'][0]['filename']
+                            subfolder = node_output['images'][0].get('subfolder', '')
+                            if subfolder:
+                                return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={image_filename}&subfolder={subfolder}'})
                             return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={image_filename}'})
                     
-                    print("⚠️ Видео не найдено в outputs")
-                    return jsonify({'error': 'Video not found in outputs'}), 500
+                    # Если видео не найдено в outputs, ищем на диске
+                    print("🔍 Ищем видео на диске...")
+                    video_files = glob.glob('/workspace/ComfyUI/output/**/*.mp4', recursive=True)
+                    if video_files:
+                        latest_video = max(video_files, key=os.path.getctime)
+                        video_filename = os.path.basename(latest_video)
+                        subfolder = os.path.basename(os.path.dirname(latest_video))
+                        if subfolder != 'output':
+                            print(f"✅ Найдено видео на диске: {video_filename} в папке {subfolder}")
+                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
+                        else:
+                            print(f"✅ Найдено видео на диске: {video_filename}")
+                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
+                    
+                    print("⚠️ Видео не найдено ни в outputs, ни на диске")
+                    return jsonify({'error': 'Video not found'}), 500
             except Exception as e:
                 print(f"Error: {e}")
             time.sleep(2)
@@ -286,6 +320,7 @@ def generate():
 if __name__ == '__main__':
     print(f"Starting worker on port 8288, ComfyUI at {COMFYUI_URL}")
     app.run(host='0.0.0.0', port=8288)
+EOF
 
 # Удаляем флаг provisioning
 rm -f /.provisioning 2>/dev/null || true
