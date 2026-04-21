@@ -13,52 +13,38 @@ mkdir -p models/rife
 
 # 1. VAE
 echo "=== Downloading VAE ==="
-if [ ! -f "models/vae/wan_2.1_vae.safetensors" ]; then
-    wget -O models/vae/wan_2.1_vae.safetensors \
-        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors?download=1"
-fi
+wget -q --show-progress -O models/vae/wan_2.1_vae.safetensors \
+    "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors?download=1" || echo "VAE already exists"
 
 # 2. Text Encoder
 echo "=== Downloading Text Encoder ==="
-if [ ! -f "models/text_encoders/nsfw_wan_umt5-xxl_fp8_scaled.safetensors" ]; then
-    wget -O models/text_encoders/nsfw_wan_umt5-xxl_fp8_scaled.safetensors \
-        "https://huggingface.co/NSFW-API/NSFW-Wan-UMT5-XXL/resolve/main/nsfw_wan_umt5-xxl_fp8_scaled.safetensors?download=1"
-fi
+wget -q --show-progress -O models/text_encoders/nsfw_wan_umt5-xxl_fp8_scaled.safetensors \
+    "https://huggingface.co/NSFW-API/NSFW-Wan-UMT5-XXL/resolve/main/nsfw_wan_umt5-xxl_fp8_scaled.safetensors?download=1" || echo "Text Encoder already exists"
 
 # 3. Diffusion model HIGH lighting
 echo "=== Downloading Wan model HIGH lighting ==="
-if [ ! -f "models/diffusion_models/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_v2.0.safetensors" ]; then
-    wget -O models/diffusion_models/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_v2.0.safetensors \
-        "https://huggingface.co/FX-FeiHou/wan2.2-Remix/resolve/main/NSFW/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_v2.0.safetensors?download=1"
-fi
+wget -q --show-progress -O models/diffusion_models/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_v2.0.safetensors \
+    "https://huggingface.co/FX-FeiHou/wan2.2-Remix/resolve/main/NSFW/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_v2.0.safetensors?download=1" || echo "HIGH model already exists"
 
 # 4. Diffusion model LOW lighting
 echo "=== Downloading Wan model LOW lighting ==="
-if [ ! -f "models/diffusion_models/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_v2.0.safetensors" ]; then
-    wget -O models/diffusion_models/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_v2.0.safetensors \
-        "https://huggingface.co/FX-FeiHou/wan2.2-Remix/resolve/main/NSFW/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_v2.0.safetensors?download=1"
-fi
+wget -q --show-progress -O models/diffusion_models/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_v2.0.safetensors \
+    "https://huggingface.co/FX-FeiHou/wan2.2-Remix/resolve/main/NSFW/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_v2.0.safetensors?download=1" || echo "LOW model already exists"
 
 # 5. LoRA HIGH
 echo "=== Downloading LoRA HIGH ==="
-if [ ! -f "models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors" ]; then
-    wget -O models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors \
-        "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22-Lightning/old/Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors?download=1"
-fi
+wget -q --show-progress -O models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors \
+    "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22-Lightning/old/Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors?download=1" || echo "LoRA HIGH already exists"
 
 # 6. LoRA LOW
 echo "=== Downloading LoRA LOW ==="
-if [ ! -f "models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors" ]; then
-    wget -O models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors \
-        "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22-Lightning/old/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors?download=1"
-fi
+wget -q --show-progress -O models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors \
+    "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22-Lightning/old/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors?download=1" || echo "LoRA LOW already exists"
 
 # 7. RIFE model
 echo "=== Downloading RIFE model ==="
-if [ ! -f "models/rife/rife47.pth" ]; then
-    wget -O models/rife/rife47.pth \
-        "https://huggingface.co/jasonot/mycomfyui/resolve/main/rife47.pth?download=1"
-fi
+wget -q --show-progress -O models/rife/rife47.pth \
+    "https://huggingface.co/jasonot/mycomfyui/resolve/main/rife47.pth?download=1" || echo "RIFE already exists"
 
 echo "=== All models downloaded ==="
 
@@ -66,418 +52,121 @@ echo "=== All models downloaded ==="
 echo "=== Installing custom nodes ==="
 cd custom_nodes
 
-# WanVideo Wrapper
-if [ ! -d "ComfyUI-WanVideoWrapper" ]; then
-    git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git
-    cd ComfyUI-WanVideoWrapper
-    /venv/main/bin/pip install -r requirements.txt 2>/dev/null || true
-    cd ..
-fi
-
-# KJNodes
-if [ ! -d "ComfyUI-KJNodes" ]; then
-    git clone https://github.com/kijai/ComfyUI-KJNodes.git
-    cd ComfyUI-KJNodes
-    /venv/main/bin/pip install -r requirements.txt 2>/dev/null || true
-    cd ..
-fi
-
-# Custom Scripts (MathExpression)
-if [ ! -d "ComfyUI-Custom-Scripts" ]; then
-    git clone https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git
-    cd ComfyUI-Custom-Scripts
-    /venv/main/bin/pip install -r requirements.txt 2>/dev/null || true
-    cd ..
-fi
-
-# Frame Interpolation (RIFE)
-if [ ! -d "ComfyUI-Frame-Interpolation" ]; then
-    git clone https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git
-    cd ComfyUI-Frame-Interpolation
-    /venv/main/bin/pip install -r requirements.txt 2>/dev/null || true
-    cd ..
-fi
-
-# Easy Use
-if [ ! -d "ComfyUI-Easy-Use" ]; then
-    git clone https://github.com/yolain/ComfyUI-Easy-Use.git
-    cd ComfyUI-Easy-Use
-    /venv/main/bin/pip install -r requirements.txt 2>/dev/null || true
-    cd ..
-fi
-
-# VideoHelperSuite (нужен для CreateVideo)
-if [ ! -d "ComfyUI-VideoHelperSuite" ]; then
-    git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git
-    cd ComfyUI-VideoHelperSuite
-    /venv/main/bin/pip install -r requirements.txt 2>/dev/null || true
-    cd ..
-fi
+for repo in \
+    "https://github.com/kijai/ComfyUI-WanVideoWrapper.git" \
+    "https://github.com/kijai/ComfyUI-KJNodes.git" \
+    "https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git" \
+    "https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git" \
+    "https://github.com/yolain/ComfyUI-Easy-Use.git"
+do
+    dir=$(basename "$repo" .git)
+    if [ ! -d "$dir" ]; then
+        git clone "$repo"
+    fi
+done
 
 echo "=== Custom nodes installed ==="
 
-# ============================================
-# PyTorch для CUDA 12.6+
-# ============================================
-echo "=== Installing PyTorch for CUDA 12.6+ ==="
-/venv/main/bin/pip uninstall torch torchvision torchaudio -y
-/venv/main/bin/pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+# Устанавливаем зависимости
+echo "=== Installing dependencies ==="
+/venv/main/bin/pip install --quiet --upgrade pip
+/venv/main/bin/pip install --quiet \
+    flask requests \
+    opencv-python opencv-python-headless \
+    accelerate transformers diffusers peft \
+    gguf ftfy einops sentencepiece protobuf
 
-# Остальные зависимости
-echo "=== Installing other dependencies ==="
-/venv/main/bin/pip install --upgrade pip
-/venv/main/bin/pip install \
-    flask \
-    accelerate \
-    transformers \
-    diffusers \
-    peft \
-    opencv-python \
-    opencv-python-headless \
-    GitPython \
-    sentencepiece \
-    protobuf \
-    einops \
-    ftfy \
-    gguf \
-    numba \
-    scipy \
-    imageio \
-    imageio-ffmpeg \
-    numexpr \
-    requests \
-    pillow
+echo "=== Dependencies installed ==="
 
-# Проверяем
-/venv/main/bin/python -c "import torch; print(f'✅ PyTorch {torch.__version__} OK')"
-/venv/main/bin/python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
-/venv/main/bin/python -c "import cv2; print('✅ OpenCV OK')"
-/venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
-/venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
-/venv/main/bin/python -c "import flask; print('✅ Flask OK')"
-
-# Создаём конфиг для Manager
-mkdir -p custom_nodes/ComfyUI-Manager
-cat > custom_nodes/ComfyUI-Manager/config.ini << 'EOF'
-[default]
-security_level = weak
-git_check = False
-EOF
-
-# Автоматический фикс нод
-echo "=== Running auto-fix for nodes ==="
-cat > /tmp/fix_nodes.py << 'EOF'
-import os
-import shutil
-
-custom_nodes_path = "/workspace/ComfyUI/custom_nodes"
-nodes_to_fix = [
-    "ComfyUI-Custom-Scripts",
-    "ComfyUI-WanVideoWrapper",
-    "ComfyUI-KJNodes",
-    "ComfyUI-Frame-Interpolation",
-    "ComfyUI-Easy-Use",
-    "ComfyUI-VideoHelperSuite"
-]
-
-for node in nodes_to_fix:
-    node_path = os.path.join(custom_nodes_path, node)
-    if os.path.exists(node_path):
-        init_file = os.path.join(node_path, "__init__.py")
-        if not os.path.exists(init_file):
-            with open(init_file, "w") as f:
-                f.write("# Auto-generated\n")
-            print(f"✅ Created __init__.py for {node}")
-        
-        for root, dirs, files in os.walk(node_path):
-            for file in files:
-                if file.endswith(".pyc"):
-                    os.remove(os.path.join(root, file))
-            if "__pycache__" in dirs:
-                shutil.rmtree(os.path.join(root, "__pycache__"), ignore_errors=True)
-        print(f"✅ Fixed {node}")
-print("✅ Auto-fix completed")
-EOF
-
-/venv/main/bin/python /tmp/fix_nodes.py
-
-# Создаём папку для видео
-mkdir -p /workspace/ComfyUI/output/video
-
-# ПРИНУДИТЕЛЬНО СОЗДАЁМ ПАПКУ input (ГАРАНТИРУЕМ, ЧТО ЭТО НЕ ФАЙЛ)
-rm -rf /workspace/ComfyUI/input
-mkdir -p /workspace/ComfyUI/input
-
-# Создаём worker.py (ИСПРАВЛЕННАЯ ВЕРСИЯ)
-echo "=== Creating worker.py ==="
-cat > /workspace/ComfyUI/worker.py << 'PYTHONEOF'
-import json
-import base64
-import time
-import os
-import requests
-import glob
+# Создаём worker.py на порту 8288
+cat > /workspace/ComfyUI/worker.py << 'EOF'
+import json, base64, time, os, requests
 from flask import Flask, request, jsonify
-from PIL import Image
-import io
 
 app = Flask(__name__)
 
-COMFYUI_PORT = 18188
-COMFYUI_URL = f"http://localhost:{COMFYUI_PORT}"
-COMFYUI_BASE = "/workspace/ComfyUI"
-
 @app.route('/generate/sync', methods=['POST'])
 def generate():
-    print(f"\n{'='*60}")
-    print(f"🔵 WORKER RECEIVED REQUEST")
-    print(f"{'='*60}")
     try:
         data = request.json
-        print(f"📥 Request data keys: {list(data.keys())}")
-        print(f"📥 Request structure: {json.dumps({k: type(v).__name__ for k,v in data.items()}, indent=2)}")
-        
-        if "input" in data:
-            workflow = data["input"].get("workflow_json", {})
-            img_b64 = data["input"].get("image_base64", "")
-        else:
-            workflow = data.get("workflow_json", {})
-            img_b64 = data.get("image_base64", "")
+        workflow = data.get('workflow_json', {})
+        img_b64 = data.get('image_base64', '')
         
         if not workflow or not img_b64:
             return jsonify({'error': 'Missing workflow or image'}), 400
         
-        print("\n" + "="*60)
-        print("🎬 PROCESSING REQUEST")
-        print("="*60)
+        os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
+        img_path = '/workspace/ComfyUI/input/temp.jpg'
+        with open(img_path, 'wb') as f:
+            f.write(base64.b64decode(img_b64))
         
-        # DEBUG: выводим текущее значение в node 148
-        if "148" in workflow and "inputs" in workflow["148"]:
-            current_image = workflow["148"]["inputs"].get("image", "UNKNOWN")
-            print(f"DEBUG: Current node 148 image value: '{current_image}'")
-            print(f"       Type: {type(current_image)}")
-            print(f"       Is string: {isinstance(current_image, str)}")
-            if isinstance(current_image, str):
-                print(f"       Length: {len(current_image)}")
+        workflow['148']['widgets_values'][0] = 'temp.jpg'
         
-        # Сохраняем картинку в input папку
-        input_dir = os.path.join(COMFYUI_BASE, 'input')
-        print(f"📁 Input directory: {input_dir}")
-        
-        # Убеждаемся что input это ПАПКА, не файл
-        if os.path.exists(input_dir) and not os.path.isdir(input_dir):
-            print(f"⚠️  {input_dir} is a file, removing...")
-            os.remove(input_dir)
-        
-        os.makedirs(input_dir, exist_ok=True)
-        print(f"✅ Input directory ready")
-        
-        # Декодируем base64 и сохраняем через PIL
-        try:
-            img_data = base64.b64decode(img_b64)
-            img = Image.open(io.BytesIO(img_data))
-            
-            img_path = os.path.join(input_dir, 'temp.jpg')
-            img.save(img_path, 'JPEG', quality=95)
-            
-            # КРИТИЧНО: Убеждаемся что файл записан на диск
-            with open(img_path, 'rb') as f:
-                f.seek(0)
-                _ = f.read()  # Read to verify
-            os.sync() if hasattr(os, 'sync') else None  # Flush to disk
-            time.sleep(0.5)  # Небольшая задержка для записи
-            
-            file_size = os.path.getsize(img_path)
-            print(f"✅ Image saved: {img_path}")
-            print(f"   Size: {file_size} bytes")
-            print(f"   Format: {img.format}, Dimensions: {img.size}")
-            print(f"   File verified on disk ✓")
-        except Exception as e:
-            print(f"❌ Failed to save image: {e}")
-            return jsonify({'error': f'Image save failed: {str(e)}'}), 400
-        
-        # Проверяем что файл существует
-        if not os.path.exists(img_path):
-            print(f"❌ Image file not found after save: {img_path}")
-            return jsonify({'error': 'Image file not found'}), 500
-        
-        print(f"✅ Image file verified: {os.path.getsize(img_path)} bytes")
-        
-        # Список файлов в input папке
-        files_in_input = os.listdir(input_dir)
-        print(f"   Files in input directory: {files_in_input}")
-        
-        # Обновляем ноду LoadImage (148)
-        if "148" in workflow:
-            if "inputs" not in workflow["148"]:
-                workflow["148"]["inputs"] = {}
-            
-            # ВАЖНО: убеждаемся что это ровно "temp.jpg", не абсолютный путь!
-            old_value = workflow["148"]["inputs"].get("image", "")
-            workflow["148"]["inputs"]["image"] = "temp.jpg"
-            
-            print(f"✅ Updated node 148")
-            print(f"   Old value: '{old_value}'")
-            print(f"   New value: 'temp.jpg'")
-            
-            # Убираем upload/absolute path если они есть
-            if "upload" in workflow["148"]["inputs"]:
-                del workflow["148"]["inputs"]["upload"]
-        
-        # DEBUG: выводим workflow перед отправкой
-        print(f"\n🔍 DEBUG: Full node 148 before sending to ComfyUI:")
-        print(f"   {json.dumps(workflow['148'], indent=4)}")
-        
-        # Ждём ComfyUI
-        print("\n⏳ Waiting for ComfyUI to be ready...")
-        for i in range(60):
+        for i in range(30):
             try:
-                requests.get(f'{COMFYUI_URL}/', timeout=2)
-                print(f"✅ ComfyUI ready after {i+1} attempts")
+                requests.get('http://localhost:18188/', timeout=2)
                 break
             except:
-                pass
-            time.sleep(1)
+                time.sleep(1)
         
-        # Отправляем запрос
-        print(f"\n📤 Sending prompt to ComfyUI...")
-        resp = requests.post(f'{COMFYUI_URL}/prompt', json={'prompt': workflow})
+        resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
         if resp.status_code != 200:
             return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
         
         prompt_id = resp.json()['prompt_id']
-        print(f"✅ Prompt ID: {prompt_id}")
         
-        # Ждём результат
-        timeout = 600
-        start_time = time.time()
-        while time.time() - start_time < timeout:
+        timeout = 300
+        start = time.time()
+        while time.time() - start < timeout:
             try:
-                resp = requests.get(f'{COMFYUI_URL}/history/{prompt_id}')
+                resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
                 data = resp.json()
                 if data.get(prompt_id):
                     outputs = data[prompt_id]['outputs']
-                    print(f"=== OUTPUTS ===")
-                    print(json.dumps(outputs, indent=2))
-                    print(f"==============")
-                    
                     for node_id, node_output in outputs.items():
-                        if 'videos' in node_output and node_output['videos']:
+                        if 'videos' in node_output:
                             video_filename = node_output['videos'][0]['filename']
-                            subfolder = node_output['videos'][0].get('subfolder', '')
-                            if subfolder:
-                                return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
-                        if 'video' in node_output and node_output['video']:
-                            video_filename = node_output['video'][0]['filename']
-                            subfolder = node_output['video'][0].get('subfolder', '')
-                            if subfolder:
-                                return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
-                        if 'images' in node_output and node_output['images']:
-                            print(f"  Found images in node {node_id}: {len(node_output['images'])}")
-                            image_filename = node_output['images'][0]['filename']
-                            subfolder = node_output['images'][0].get('subfolder', '')
-                            if subfolder:
-                                return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={image_filename}&subfolder={subfolder}'})
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={image_filename}'})
-                    
-                    # Если видео не найдено в outputs, ищем на диске
-                    print("🔍 Looking for video on disk...")
-                    
-                    # Вариант 1: через симлинк
-                    video_link = '/workspace/ComfyUI/output/video/ComfyUI_00001_.mp4'
-                    if os.path.exists(video_link):
-                        real_path = os.path.realpath(video_link)
-                        if os.path.exists(real_path):
-                            video_filename = os.path.basename(real_path)
-                            subfolder = os.path.basename(os.path.dirname(real_path))
-                            print(f"✅ Found video via symlink: {video_filename} in {subfolder}")
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
-                    
-                    # Вариант 2: через UUID папки
-                    output_dirs = glob.glob('/workspace/ComfyUI/output/*/')
-                    if output_dirs:
-                        latest_dir = max(output_dirs, key=os.path.getctime)
-                        video_files = glob.glob(f'{latest_dir}*.mp4')
-                        if video_files:
-                            video_filename = os.path.basename(video_files[0])
-                            subfolder = os.path.basename(latest_dir.rstrip('/'))
-                            print(f"✅ Found video in UUID folder: {video_filename} in {subfolder}")
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
-                    
-                    print("⚠️ Video not found")
-                    return jsonify({'error': 'Video not found'}), 500
-            except Exception as e:
-                print(f"Error: {e}")
+                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
+            except:
+                pass
             time.sleep(2)
         
         return jsonify({'error': 'Timeout waiting for video'}), 500
         
     except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({'status': 'ok', 'worker': 'running'}), 200
-
 if __name__ == '__main__':
-    print(f"\n{'='*60}")
-    print(f"🟢 WORKER STARTING ON PORT 8288")
-    print(f"{'='*60}")
-    print(f"ComfyUI URL: {COMFYUI_URL}")
-    print(f"Input directory: /workspace/ComfyUI/input")
-    print(f"Listening on: http://0.0.0.0:8288")
-    print(f"{'='*60}\n")
-    app.run(host='0.0.0.0', port=8288, debug=False)
-PYTHONEOF
+    print("Starting worker on port 8288...")
+    app.run(host='0.0.0.0', port=8288)
+EOF
 
-# Удаляем флаг provisioning
-rm -f /.provisioning 2>/dev/null || true
+echo "=== Provisioning script finished ==="
 
-# Перезапускаем ComfyUI
-echo "=== Restarting ComfyUI ==="
-supervisorctl restart comfyui
+# Удаляем флаг
+rm -f /.provisioning
 
-# Ждём запуска ComfyUI
-echo "Waiting for ComfyUI to start..."
+# Ждём ComfyUI
+echo "Waiting for ComfyUI to be ready..."
 for i in {1..30}; do
     if curl -s http://localhost:18188/ > /dev/null 2>&1; then
-        echo "✅ ComfyUI is running on port 18188!"
+        echo "ComfyUI is ready!"
         break
     fi
     sleep 2
 done
 
-# Убиваем старый worker если был
-echo "=== Stopping old worker if exists ==="
-pkill -f "python.*worker.py" || true
-sleep 2
-
-# Запускаем worker
-echo "=== Starting worker ==="
+# Запускаем worker на порту 8288
 cd /workspace/ComfyUI
 nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
 
-# Даём время на запуск
-sleep 3
+sleep 5
 
-# Проверяем что worker запустился
-echo "=== Checking worker startup ==="
-if ps aux | grep -q "[p]ython.*worker.py"; then
-    echo "✅ Worker process started successfully"
+# Проверяем worker
+if curl -s http://localhost:8288/ > /dev/null 2>&1; then
+    echo "✅ Worker started on port 8288"
 else
-    echo "⚠️ Worker process not found, checking logs..."
-    tail -10 /workspace/worker.log
+    echo "⚠️ Worker may not be ready yet"
 fi
 
-# Показываем последние логи
-echo ""
-echo "=== Latest worker logs ==="
-tail -5 /workspace/worker.log
-
-echo ""
 echo "=== Provisioning complete ==="
