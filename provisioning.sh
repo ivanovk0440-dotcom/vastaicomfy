@@ -204,7 +204,7 @@ mkdir -p /workspace/ComfyUI/output/video
 rm -rf /workspace/ComfyUI/input
 mkdir -p /workspace/ComfyUI/input
 
-# Создаём worker.py (ИСПРАВЛЕННАЯ ВЕРСИЯ v2)
+# Создаём worker.py (ИСПРАВЛЕННАЯ ВЕРСИЯ v3)
 echo "=== Creating worker.py ==="
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json
@@ -221,6 +221,7 @@ app = Flask(__name__)
 
 COMFYUI_PORT = 18188
 COMFYUI_URL = f"http://localhost:{COMFYUI_PORT}"
+COMFYUI_BASE = "/workspace/ComfyUI"
 
 @app.route('/generate/sync', methods=['POST'])
 def generate():
@@ -236,114 +237,158 @@ def generate():
         if not workflow or not img_b64:
             return jsonify({'error': 'Missing workflow or image'}), 400
         
-        # Сохраняем картинку (ГАРАНТИРУЕМ, ЧТО ПАПКА СУЩЕСТВУЕТ)
-        input_dir = '/workspace/ComfyUI/input'
+        print("\n" + "="*60)
+        print("🎬 PROCESSING REQUEST")
+        print("="*60)
+        
+        # Сохраняем картинку в input папку
+        input_dir = os.path.join(COMFYUI_BASE, 'input')
+        print(f"📁 Input directory: {input_dir}")
+        
+        # Убеждаемся что input это ПАПКА, не файл
         if os.path.exists(input_dir) and not os.path.isdir(input_dir):
+            print(f"⚠️  {input_dir} is a file, removing...")
             os.remove(input_dir)
+        
         os.makedirs(input_dir, exist_ok=True)
+        print(f"✅ Input directory ready")
         
         # Декодируем base64 и сохраняем через PIL
-        img_data = base64.b64decode(img_b64)
-        img = Image.open(io.BytesIO(img_data))
-        img_path = os.path.join(input_dir, 'temp.jpg')
-        img.save(img_path, 'JPEG', quality=95)
-        print(f"✅ Image saved: {img_path} ({os.path.getsize(img_path)} bytes)")
+        try:
+            img_data = base64.b64decode(img_b64)
+            img = Image.open(io.BytesIO(img_data))
+            
+            img_path = os.path.join(input_dir, 'temp.jpg')
+            img.save(img_path, 'JPEG', quality=95)
+            
+            file_size = os.path.getsize(img_path)
+            print(f"✅ Image saved: {img_path}")
+            print(f"   Size: {file_size} bytes")
+            print(f"   Format: {img.format}, Dimensions: {img.size}")
+        except Exception as e:
+            print(f"❌ Failed to save image: {e}")
+            return jsonify({'error': f'Image save failed: {str(e)}'}), 400
         
-        # Обновляем ноду LoadImage (148) - ТОЛЬКО ИМЯ ФАЙЛА
+        # Проверяем что файл существует
+        if not os.path.exists(img_path):
+            print(f"❌ Image file not found after save: {img_path}")
+            return jsonify({'error': 'Image file not found'}), 500
+        
+        print(f"✅ Image file verified: {os.path.getsize(img_path)} bytes")
+        
+        # Список файлов в input папке
+        files_in_input = os.listdir(input_dir)
+        print(f"   Files in input directory: {files_in_input}")
+        
+        # Обновляем ноду LoadImage (148)
         if "148" in workflow:
             if "inputs" not in workflow["148"]:
                 workflow["148"]["inputs"] = {}
+            
             workflow["148"]["inputs"]["image"] = "temp.jpg"
-            # Убираем upload, если есть
+            print(f"✅ Updated node 148")
+            print(f"   image = 'temp.jpg'")
+            
+            # Убираем upload/absolute path если они есть
             if "upload" in workflow["148"]["inputs"]:
                 del workflow["148"]["inputs"]["upload"]
-            print(f"✅ Updated node 148 with image: temp.jpg")
         else:
-            print("⚠️ Node 148 not found in workflow")
+            print(f"⚠️  Node 148 not found in workflow, searching for LoadImage...")
+            for node_id, node in workflow.items():
+                if node.get("class_type") == "LoadImage":
+                    if "inputs" not in node:
+                        node["inputs"] = {}
+                    node["inputs"]["image"] = "temp.jpg"
+                    print(f"✅ Found LoadImage in node {node_id}")
+                    break
         
         # Ждём ComfyUI
+        print(f"\n🔍 Waiting for ComfyUI...")
         for i in range(60):
             try:
-                requests.get(f'{COMFYUI_URL}/', timeout=2)
-                print(f"✅ ComfyUI ready after {i+1} attempts")
-                break
+                resp = requests.get(f'{COMFYUI_URL}/', timeout=2)
+                if resp.status_code == 200:
+                    print(f"✅ ComfyUI ready (attempt {i+1})")
+                    break
             except:
                 pass
+            if i % 10 == 0:
+                print(f"   Attempt {i+1}/60...")
             time.sleep(1)
         
         # Отправляем запрос
+        print(f"\n📤 Sending prompt to ComfyUI...")
         resp = requests.post(f'{COMFYUI_URL}/prompt', json={'prompt': workflow})
-        if resp.status_code != 200:
-            return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
+        print(f"   Status: {resp.status_code}")
         
-        prompt_id = resp.json()['prompt_id']
+        if resp.status_code != 200:
+            error_text = resp.text[:500]
+            print(f"❌ ComfyUI error: {error_text}")
+            return jsonify({'error': f'ComfyUI error: {error_text}'}), 500
+        
+        resp_data = resp.json()
+        if 'prompt_id' not in resp_data:
+            print(f"❌ No prompt_id in response: {resp_data}")
+            return jsonify({'error': 'No prompt_id received'}), 500
+        
+        prompt_id = resp_data['prompt_id']
         print(f"✅ Prompt ID: {prompt_id}")
         
         # Ждём результат
+        print(f"\n⏳ Waiting for generation (timeout: 600s)...")
         timeout = 600
         start_time = time.time()
+        
         while time.time() - start_time < timeout:
             try:
                 resp = requests.get(f'{COMFYUI_URL}/history/{prompt_id}')
                 data = resp.json()
+                
                 if data.get(prompt_id):
+                    print(f"✅ Result found!")
                     outputs = data[prompt_id]['outputs']
-                    print(f"=== OUTPUTS ===")
-                    print(json.dumps(outputs, indent=2))
-                    print(f"==============")
                     
+                    # Ищем видео или изображение в outputs
                     for node_id, node_output in outputs.items():
                         if 'videos' in node_output and node_output['videos']:
                             video_filename = node_output['videos'][0]['filename']
                             subfolder = node_output['videos'][0].get('subfolder', '')
+                            url = f'{COMFYUI_URL}/view?filename={video_filename}'
                             if subfolder:
-                                return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
+                                url += f'&subfolder={subfolder}'
+                            print(f"✅ Video found: {video_filename}")
+                            return jsonify({'video_url': url})
+                        
                         if 'video' in node_output and node_output['video']:
                             video_filename = node_output['video'][0]['filename']
                             subfolder = node_output['video'][0].get('subfolder', '')
+                            url = f'{COMFYUI_URL}/view?filename={video_filename}'
                             if subfolder:
-                                return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
+                                url += f'&subfolder={subfolder}'
+                            print(f"✅ Video found: {video_filename}")
+                            return jsonify({'video_url': url})
+                        
                         if 'images' in node_output and node_output['images']:
-                            print(f"  Found images in node {node_id}: {len(node_output['images'])}")
                             image_filename = node_output['images'][0]['filename']
                             subfolder = node_output['images'][0].get('subfolder', '')
+                            url = f'{COMFYUI_URL}/view?filename={image_filename}'
                             if subfolder:
-                                return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={image_filename}&subfolder={subfolder}'})
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={image_filename}'})
+                                url += f'&subfolder={subfolder}'
+                            print(f"✅ Image found: {image_filename}")
+                            return jsonify({'video_url': url})
                     
-                    # Если видео не найдено в outputs, ищем на диске
-                    print("🔍 Looking for video on disk...")
-                    
-                    # Вариант 1: через симлинк
-                    video_link = '/workspace/ComfyUI/output/video/ComfyUI_00001_.mp4'
-                    if os.path.exists(video_link):
-                        real_path = os.path.realpath(video_link)
-                        if os.path.exists(real_path):
-                            video_filename = os.path.basename(real_path)
-                            subfolder = os.path.basename(os.path.dirname(real_path))
-                            print(f"✅ Found video via symlink: {video_filename} in {subfolder}")
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
-                    
-                    # Вариант 2: через UUID папки
-                    output_dirs = glob.glob('/workspace/ComfyUI/output/*/')
-                    if output_dirs:
-                        latest_dir = max(output_dirs, key=os.path.getctime)
-                        video_files = glob.glob(f'{latest_dir}/*.mp4')
-                        if video_files:
-                            video_filename = os.path.basename(video_files[0])
-                            subfolder = os.path.basename(latest_dir.rstrip('/'))
-                            print(f"✅ Found video in UUID folder: {video_filename} in {subfolder}")
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
-                    
-                    print("⚠️ Video not found")
-                    return jsonify({'error': 'Video not found'}), 500
+                    print("⚠️  No output files found in history")
+                    return jsonify({'error': 'No output found'}), 500
             except Exception as e:
-                print(f"Error: {e}")
+                print(f"   Error checking history: {e}")
+            
+            elapsed = int(time.time() - start_time)
+            if elapsed % 10 == 0:
+                print(f"   Elapsed: {elapsed}s...")
             time.sleep(2)
         
-        return jsonify({'error': 'Timeout waiting for video'}), 500
+        print(f"❌ Timeout after {timeout}s")
+        return jsonify({'error': f'Timeout waiting for generation'}), 500
         
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -352,8 +397,9 @@ def generate():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    print(f"Starting worker on port 8288, ComfyUI at {COMFYUI_URL}")
-    app.run(host='0.0.0.0', port=8288)
+    print(f"Starting worker on port 8288")
+    print(f"ComfyUI at: {COMFYUI_URL}")
+    app.run(host='0.0.0.0', port=8288, debug=False)
 EOF
 
 # Удаляем флаг provisioning
