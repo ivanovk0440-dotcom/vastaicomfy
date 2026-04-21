@@ -200,7 +200,7 @@ EOF
 # Создаём папку для видео
 mkdir -p /workspace/ComfyUI/output/video
 
-# Создаём worker.py
+# Создаём worker.py (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 echo "=== Creating worker.py ==="
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests, glob
@@ -257,8 +257,8 @@ def generate():
         
         # Ждём результат
         timeout = 600
-        start = time.time()
-        while time.time() - start < timeout:
+        start_time = time.time()
+        while time.time() - start_time < timeout:
             try:
                 resp = requests.get(f'{COMFYUI_URL}/history/{prompt_id}')
                 data = resp.json()
@@ -291,14 +291,26 @@ def generate():
                     
                     # Если видео не найдено в outputs, ищем на диске
                     print("🔍 Ищем видео на диске...")
-                    video_files = glob.glob('/workspace/ComfyUI/output/**/*.mp4', recursive=True)
+                    # Ищем ВСЕ видео, НЕ СИМЛИНКИ, созданные после начала генерации
+                    video_files = []
+                    for f in glob.glob('/workspace/ComfyUI/output/**/*.mp4', recursive=True):
+                        if os.path.isfile(f) and not os.path.islink(f):
+                            if os.path.getctime(f) >= start_time:
+                                video_files.append(f)
+                    
+                    if not video_files:
+                        # Если не нашли по времени, берём самые свежие (не симлинки)
+                        for f in glob.glob('/workspace/ComfyUI/output/**/*.mp4', recursive=True):
+                            if os.path.isfile(f) and not os.path.islink(f):
+                                video_files.append(f)
+                    
                     if video_files:
                         latest_video = max(video_files, key=os.path.getctime)
                         video_filename = os.path.basename(latest_video)
-                        subfolder = os.path.basename(os.path.dirname(latest_video))
-                        if subfolder != 'output':
-                            print(f"✅ Найдено видео на диске: {video_filename} в папке {subfolder}")
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
+                        rel_path = os.path.relpath(os.path.dirname(latest_video), '/workspace/ComfyUI/output')
+                        if rel_path != '.':
+                            print(f"✅ Найдено видео на диске: {video_filename} в папке {rel_path}")
+                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={rel_path}'})
                         else:
                             print(f"✅ Найдено видео на диске: {video_filename}")
                             return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
