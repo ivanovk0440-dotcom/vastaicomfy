@@ -200,7 +200,11 @@ EOF
 # Создаём папку для видео
 mkdir -p /workspace/ComfyUI/output/video
 
-# Создаём worker.py
+# ПРИНУДИТЕЛЬНО СОЗДАЁМ ПАПКУ input (ГАРАНТИРУЕМ, ЧТО ЭТО НЕ ФАЙЛ)
+rm -f /workspace/ComfyUI/input
+mkdir -p /workspace/ComfyUI/input
+
+# Создаём worker.py (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 echo "=== Creating worker.py ==="
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests, glob
@@ -225,11 +229,15 @@ def generate():
         if not workflow or not img_b64:
             return jsonify({'error': 'Missing workflow or image'}), 400
         
-        # Сохраняем картинку
-        os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
-        img_path = '/workspace/ComfyUI/input/temp.jpg'
+        # Сохраняем картинку (ГАРАНТИРУЕМ, ЧТО ПАПКА СУЩЕСТВУЕТ)
+        input_dir = '/workspace/ComfyUI/input'
+        if os.path.exists(input_dir) and not os.path.isdir(input_dir):
+            os.remove(input_dir)
+        os.makedirs(input_dir, exist_ok=True)
+        img_path = os.path.join(input_dir, 'temp.jpg')
         with open(img_path, 'wb') as f:
             f.write(base64.b64decode(img_b64))
+        print(f"✅ Image saved: {img_path}")
         
         # Обновляем ноду LoadImage (148)
         if "148" in workflow:
@@ -241,7 +249,7 @@ def generate():
         for i in range(60):
             try:
                 requests.get(f'{COMFYUI_URL}/', timeout=2)
-                print(f"✅ ComfyUI готов после {i+1} попыток")
+                print(f"✅ ComfyUI ready after {i+1} attempts")
                 break
             except:
                 pass
@@ -257,16 +265,16 @@ def generate():
         
         # Ждём результат
         timeout = 600
-        start = time.time()
-        while time.time() - start < timeout:
+        start_time = time.time()
+        while time.time() - start_time < timeout:
             try:
                 resp = requests.get(f'{COMFYUI_URL}/history/{prompt_id}')
                 data = resp.json()
                 if data.get(prompt_id):
                     outputs = data[prompt_id]['outputs']
-                    print(f"=== ВСЕ OUTPUTS ===")
+                    print(f"=== OUTPUTS ===")
                     print(json.dumps(outputs, indent=2))
-                    print(f"==================")
+                    print(f"==============")
                     
                     for node_id, node_output in outputs.items():
                         if 'videos' in node_output and node_output['videos']:
@@ -282,7 +290,7 @@ def generate():
                                 return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
                             return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
                         if 'images' in node_output and node_output['images']:
-                            print(f"  Найдены images в ноде {node_id}: {len(node_output['images'])}")
+                            print(f"  Found images in node {node_id}: {len(node_output['images'])}")
                             image_filename = node_output['images'][0]['filename']
                             subfolder = node_output['images'][0].get('subfolder', '')
                             if subfolder:
@@ -290,20 +298,30 @@ def generate():
                             return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={image_filename}'})
                     
                     # Если видео не найдено в outputs, ищем на диске
-                    print("🔍 Ищем видео на диске...")
-                    video_files = glob.glob('/workspace/ComfyUI/output/**/*.mp4', recursive=True)
-                    if video_files:
-                        latest_video = max(video_files, key=os.path.getctime)
-                        video_filename = os.path.basename(latest_video)
-                        subfolder = os.path.basename(os.path.dirname(latest_video))
-                        if subfolder != 'output':
-                            print(f"✅ Найдено видео на диске: {video_filename} в папке {subfolder}")
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
-                        else:
-                            print(f"✅ Найдено видео на диске: {video_filename}")
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
+                    print("🔍 Looking for video on disk...")
                     
-                    print("⚠️ Видео не найдено ни в outputs, ни на диске")
+                    # Вариант 1: через симлинк
+                    video_link = '/workspace/ComfyUI/output/video/ComfyUI_00001_.mp4'
+                    if os.path.exists(video_link):
+                        real_path = os.path.realpath(video_link)
+                        if os.path.exists(real_path):
+                            video_filename = os.path.basename(real_path)
+                            subfolder = os.path.basename(os.path.dirname(real_path))
+                            print(f"✅ Found video via symlink: {video_filename} in {subfolder}")
+                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
+                    
+                    # Вариант 2: через UUID папки
+                    output_dirs = glob.glob('/workspace/ComfyUI/output/*/')
+                    if output_dirs:
+                        latest_dir = max(output_dirs, key=os.path.getctime)
+                        video_files = glob.glob(f'{latest_dir}/*.mp4')
+                        if video_files:
+                            video_filename = os.path.basename(video_files[0])
+                            subfolder = os.path.basename(latest_dir.rstrip('/'))
+                            print(f"✅ Found video in UUID folder: {video_filename} in {subfolder}")
+                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
+                    
+                    print("⚠️ Video not found")
                     return jsonify({'error': 'Video not found'}), 500
             except Exception as e:
                 print(f"Error: {e}")
@@ -312,7 +330,7 @@ def generate():
         return jsonify({'error': 'Timeout waiting for video'}), 500
         
     except Exception as e:
-        print(f"❌ Ошибка: {e}")
+        print(f"❌ Error: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
