@@ -261,10 +261,18 @@ def generate():
             img_path = os.path.join(input_dir, 'temp.jpg')
             img.save(img_path, 'JPEG', quality=95)
             
+            # КРИТИЧНО: Убеждаемся что файл записан на диск
+            with open(img_path, 'rb') as f:
+                f.seek(0)
+                _ = f.read()  # Read to verify
+            os.sync() if hasattr(os, 'sync') else None  # Flush to disk
+            time.sleep(0.5)  # Небольшая задержка для записи
+            
             file_size = os.path.getsize(img_path)
             print(f"✅ Image saved: {img_path}")
             print(f"   Size: {file_size} bytes")
             print(f"   Format: {img.format}, Dimensions: {img.size}")
+            print(f"   File verified on disk ✓")
         except Exception as e:
             print(f"❌ Failed to save image: {e}")
             return jsonify({'error': f'Image save failed: {str(e)}'}), 400
@@ -315,6 +323,19 @@ def generate():
             if i % 10 == 0:
                 print(f"   Attempt {i+1}/60...")
             time.sleep(1)
+        
+        # ФИНАЛЬНАЯ ПРОВЕРКА перед отправкой
+        print(f"\n🔍 Final verification before sending...")
+        if not os.path.exists(img_path):
+            print(f"❌ CRITICAL: Image file disappeared! {img_path}")
+            return jsonify({'error': 'Image file lost before sending'}), 500
+        
+        actual_size = os.path.getsize(img_path)
+        print(f"   ✓ File exists: {img_path}")
+        print(f"   ✓ File size: {actual_size} bytes")
+        
+        # Дополнительная задержка чтобы ComfyUI успел заметить файл
+        time.sleep(1)
         
         # Отправляем запрос
         print(f"\n📤 Sending prompt to ComfyUI...")
