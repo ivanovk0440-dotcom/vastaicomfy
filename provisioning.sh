@@ -143,7 +143,9 @@ echo "=== Installing other dependencies ==="
     scipy \
     imageio \
     imageio-ffmpeg \
-    numexpr
+    numexpr \
+    flask \
+    requests
 
 # Проверяем
 /venv/main/bin/python -c "import torch; print(f'✅ PyTorch {torch.__version__} OK')"
@@ -151,6 +153,8 @@ echo "=== Installing other dependencies ==="
 /venv/main/bin/python -c "import cv2; print('✅ OpenCV OK')"
 /venv/main/bin/python -c "import accelerate; print('✅ Accelerate OK')"
 /venv/main/bin/python -c "import gguf; print('✅ GGUF OK')"
+/venv/main/bin/python -c "import flask; print('✅ Flask OK')"
+/venv/main/bin/python -c "import requests; print('✅ Requests OK')"
 
 # Создаём конфиг для Manager
 mkdir -p custom_nodes/ComfyUI-Manager
@@ -460,10 +464,40 @@ for i in {1..30}; do
     sleep 2
 done
 
-# Запускаем worker
-cd /workspace/ComfyUI
-nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
+# Убиваем старый worker процесс если был
+echo "=== Cleaning up old worker processes ==="
+pkill -f "python.*worker.py" || true
+sleep 2
 
-sleep 5
+# Запускаем worker
+echo "=== Starting worker.py on port 8288 ==="
+cd /workspace/ComfyUI
+
+# Удаляем старый лог
+rm -f /workspace/worker.log
+
+# Запускаем worker в фоне с логированием
+/venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
+WORKER_PID=$!
+echo "Worker PID: $WORKER_PID"
+
+# Ждём что worker запустился
+sleep 3
+
+# Проверяем что worker слушает на порту 8288
+echo "Checking if worker is listening on port 8288..."
+for i in {1..10}; do
+    if curl -s http://localhost:8288/generate/sync -X POST > /dev/null 2>&1; then
+        echo "✅ Worker is running on port 8288!"
+        break
+    fi
+    if [ $i -eq 10 ]; then
+        echo "⚠️ Worker might not be responding yet (will retry)"
+        echo "=== Worker Log ==="
+        tail -20 /workspace/worker.log 2>/dev/null || echo "No log file yet"
+        echo "=================="
+    fi
+    sleep 1
+done
 
 echo "=== Provisioning complete ==="
