@@ -235,11 +235,20 @@ def generate():
             img_b64 = data.get("image_base64", "")
         
         if not workflow or not img_b64:
-            return jsonify({'error': 'Missing workflow or image'}), 400
-        
-        print("\n" + "="*60)
-        print("🎬 PROCESSING REQUEST")
-        print("="*60)
+             return jsonify({'error': 'Missing workflow or image'}), 400
+         
+         print("\n" + "="*60)
+         print("🎬 PROCESSING REQUEST")
+         print("="*60)
+         
+         # DEBUG: выводим текущее значение в node 148
+         if "148" in workflow and "inputs" in workflow["148"]:
+             current_image = workflow["148"]["inputs"].get("image", "UNKNOWN")
+             print(f"DEBUG: Current node 148 image value: '{current_image}'")
+             print(f"       Type: {type(current_image)}")
+             print(f"       Is string: {isinstance(current_image, str)}")
+             if isinstance(current_image, str):
+                 print(f"       Length: {len(current_image)}")
         
         # Сохраняем картинку в input папку
         input_dir = os.path.join(COMFYUI_BASE, 'input')
@@ -289,26 +298,32 @@ def generate():
         print(f"   Files in input directory: {files_in_input}")
         
         # Обновляем ноду LoadImage (148)
-        if "148" in workflow:
-            if "inputs" not in workflow["148"]:
-                workflow["148"]["inputs"] = {}
-            
-            workflow["148"]["inputs"]["image"] = "temp.jpg"
-            print(f"✅ Updated node 148")
-            print(f"   image = 'temp.jpg'")
-            
-            # Убираем upload/absolute path если они есть
-            if "upload" in workflow["148"]["inputs"]:
-                del workflow["148"]["inputs"]["upload"]
-        else:
-            print(f"⚠️  Node 148 not found in workflow, searching for LoadImage...")
-            for node_id, node in workflow.items():
-                if node.get("class_type") == "LoadImage":
-                    if "inputs" not in node:
-                        node["inputs"] = {}
-                    node["inputs"]["image"] = "temp.jpg"
-                    print(f"✅ Found LoadImage in node {node_id}")
-                    break
+         if "148" in workflow:
+             if "inputs" not in workflow["148"]:
+                 workflow["148"]["inputs"] = {}
+             
+             # ВАЖНО: убеждаемся что это ровно "temp.jpg", не абсолютный путь!
+             old_value = workflow["148"]["inputs"].get("image", "")
+             workflow["148"]["inputs"]["image"] = "temp.jpg"
+             
+             print(f"✅ Updated node 148")
+             print(f"   Old value: '{old_value}'")
+             print(f"   New value: 'temp.jpg'")
+             
+             # Убираем upload/absolute path если они есть
+             if "upload" in workflow["148"]["inputs"]:
+                 del workflow["148"]["inputs"]["upload"]
+                 print(f"   Removed 'upload' key")
+         else:
+             print(f"⚠️  Node 148 not found, searching for LoadImage...")
+             for node_id, node in workflow.items():
+                 if node.get("class_type") == "LoadImage":
+                     if "inputs" not in node:
+                         node["inputs"] = {}
+                     node["inputs"]["image"] = "temp.jpg"
+                     print(f"✅ Found LoadImage in node {node_id}")
+                     print(f"   Set image = 'temp.jpg'")
+                     break
         
         # Ждём ComfyUI
         print(f"\n🔍 Waiting for ComfyUI...")
@@ -325,20 +340,25 @@ def generate():
             time.sleep(1)
         
         # ФИНАЛЬНАЯ ПРОВЕРКА перед отправкой
-        print(f"\n🔍 Final verification before sending...")
-        if not os.path.exists(img_path):
-            print(f"❌ CRITICAL: Image file disappeared! {img_path}")
-            return jsonify({'error': 'Image file lost before sending'}), 500
-        
-        actual_size = os.path.getsize(img_path)
-        print(f"   ✓ File exists: {img_path}")
-        print(f"   ✓ File size: {actual_size} bytes")
-        
-        # Дополнительная задержка чтобы ComfyUI успел заметить файл
-        time.sleep(1)
-        
-        # Отправляем запрос
-        print(f"\n📤 Sending prompt to ComfyUI...")
+         print(f"\n🔍 Final verification before sending...")
+         if not os.path.exists(img_path):
+             print(f"❌ CRITICAL: Image file disappeared! {img_path}")
+             return jsonify({'error': 'Image file lost before sending'}), 500
+         
+         actual_size = os.path.getsize(img_path)
+         print(f"   ✓ File exists: {img_path}")
+         print(f"   ✓ File size: {actual_size} bytes")
+         
+         # DEBUG: выводим node 148 перед отправкой
+         print(f"\n🔍 DEBUG: Node 148 state before sending:")
+         if "148" in workflow:
+             print(f"   {json.dumps(workflow['148'], indent=2)}")
+         
+         # Дополнительная задержка чтобы ComfyUI успел заметить файл
+         time.sleep(1)
+         
+         # Отправляем запрос
+         print(f"\n📤 Sending prompt to ComfyUI...")
         resp = requests.post(f'{COMFYUI_URL}/prompt', json={'prompt': workflow})
         print(f"   Status: {resp.status_code}")
         
