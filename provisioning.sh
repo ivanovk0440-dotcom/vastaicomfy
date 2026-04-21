@@ -201,7 +201,7 @@ EOF
 mkdir -p /workspace/ComfyUI/output/video
 
 # ПРИНУДИТЕЛЬНО СОЗДАЁМ ПАПКУ input (ГАРАНТИРУЕМ, ЧТО ЭТО НЕ ФАЙЛ)
-rm -f /workspace/ComfyUI/input
+rm -rf /workspace/ComfyUI/input
 mkdir -p /workspace/ComfyUI/input
 
 # Создаём worker.py (ИСПРАВЛЕННАЯ ВЕРСИЯ)
