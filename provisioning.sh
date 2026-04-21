@@ -225,11 +225,12 @@ def generate():
         if not workflow or not img_b64:
             return jsonify({'error': 'Missing workflow or image'}), 400
         
-        # Сохраняем картинку
+        # Сохраняем картинку (ИСПРАВЛЕНО)
         os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
-        img_path = '/workspace/ComfyUI/input/temp.jpg'
+        img_path = os.path.join('/workspace/ComfyUI/input', 'temp.jpg')
         with open(img_path, 'wb') as f:
             f.write(base64.b64decode(img_b64))
+        print(f"✅ Изображение сохранено: {img_path}")
         
         # Обновляем ноду LoadImage (148)
         if "148" in workflow:
