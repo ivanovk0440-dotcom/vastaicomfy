@@ -200,7 +200,7 @@ EOF
 # Создаём папку для видео
 mkdir -p /workspace/ComfyUI/output/video
 
-# Создаём worker.py (ИСПРАВЛЕННАЯ АВТОМАТИЧЕСКАЯ ВЕРСИЯ)
+# Создаём worker.py (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 echo "=== Creating worker.py ==="
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests, glob
@@ -225,15 +225,11 @@ def generate():
         if not workflow or not img_b64:
             return jsonify({'error': 'Missing workflow or image'}), 400
         
-        # Сохраняем картинку (АВТОМАТИЧЕСКИ ИСПРАВЛЕНО)
-        input_dir = '/workspace/ComfyUI/input'
-        if os.path.exists(input_dir) and not os.path.isdir(input_dir):
-            os.remove(input_dir)
-        os.makedirs(input_dir, exist_ok=True)
-        img_path = os.path.join(input_dir, 'temp.jpg')
+        # Сохраняем картинку
+        os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
+        img_path = '/workspace/ComfyUI/input/temp.jpg'
         with open(img_path, 'wb') as f:
             f.write(base64.b64decode(img_b64))
-        print(f"✅ Изображение сохранено: {img_path}")
         
         # Обновляем ноду LoadImage (148)
         if "148" in workflow:
@@ -293,27 +289,33 @@ def generate():
                                 return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={image_filename}&subfolder={subfolder}'})
                             return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={image_filename}'})
                     
+                    # Если видео не найдено в outputs, ищем на диске
                     print("🔍 Ищем видео на диске...")
-                    video_link = '/workspace/ComfyUI/output/video/ComfyUI_00001_.mp4'
-                    if os.path.exists(video_link):
-                        real_path = os.path.realpath(video_link)
-                        if os.path.exists(real_path):
-                            video_filename = os.path.basename(real_path)
-                            subfolder = os.path.basename(os.path.dirname(real_path))
-                            print(f"✅ Найдено видео через симлинк: {video_filename} в {subfolder}")
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
+                    # Ищем ВСЕ видео, НЕ СИМЛИНКИ, созданные после начала генерации
+                    video_files = []
+                    for f in glob.glob('/workspace/ComfyUI/output/**/*.mp4', recursive=True):
+                        if os.path.isfile(f) and not os.path.islink(f):
+                            if os.path.getctime(f) >= start_time:
+                                video_files.append(f)
                     
-                    output_dirs = glob.glob('/workspace/ComfyUI/output/*/')
-                    if output_dirs:
-                        latest_dir = max(output_dirs, key=os.path.getctime)
-                        video_files = glob.glob(f'{latest_dir}/*.mp4')
-                        if video_files:
-                            video_filename = os.path.basename(video_files[0])
-                            subfolder = os.path.basename(latest_dir.rstrip('/'))
-                            print(f"✅ Найдено видео в папке UUID: {video_filename} в {subfolder}")
-                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}'})
+                    if not video_files:
+                        # Если не нашли по времени, берём самые свежие (не симлинки)
+                        for f in glob.glob('/workspace/ComfyUI/output/**/*.mp4', recursive=True):
+                            if os.path.isfile(f) and not os.path.islink(f):
+                                video_files.append(f)
                     
-                    print("⚠️ Видео не найдено")
+                    if video_files:
+                        latest_video = max(video_files, key=os.path.getctime)
+                        video_filename = os.path.basename(latest_video)
+                        rel_path = os.path.relpath(os.path.dirname(latest_video), '/workspace/ComfyUI/output')
+                        if rel_path != '.':
+                            print(f"✅ Найдено видео на диске: {video_filename} в папке {rel_path}")
+                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}&subfolder={rel_path}'})
+                        else:
+                            print(f"✅ Найдено видео на диске: {video_filename}")
+                            return jsonify({'video_url': f'{COMFYUI_URL}/view?filename={video_filename}'})
+                    
+                    print("⚠️ Видео не найдено ни в outputs, ни на диске")
                     return jsonify({'error': 'Video not found'}), 500
             except Exception as e:
                 print(f"Error: {e}")
