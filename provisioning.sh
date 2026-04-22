@@ -78,7 +78,7 @@ echo "=== Installing dependencies ==="
 
 echo "=== Dependencies installed ==="
 
-# Создаём worker.py на порту 8288
+# Создаём worker.py на порту 8288 (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests
 from flask import Flask, request, jsonify
@@ -100,8 +100,15 @@ def generate():
         with open(img_path, 'wb') as f:
             f.write(base64.b64decode(img_b64))
         
+        # === ИСПРАВЛЕНИЕ №1: Правильный путь к полю image ===
         if '148' in workflow:
             workflow['148']['inputs']['image'] = 'temp.jpg'
+        else:
+            # Fallback: ищем любую ноду LoadImage
+            for node_id, node in workflow.items():
+                if node.get('class_type') == 'LoadImage':
+                    node['inputs']['image'] = 'temp.jpg'
+                    break
         
         for i in range(30):
             try:
@@ -126,8 +133,15 @@ def generate():
                     outputs = data[prompt_id]['outputs']
                     for node_id, node_output in outputs.items():
                         if 'videos' in node_output:
-                            video_filename = node_output['videos'][0]['filename']
-                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
+                            # === ИСПРАВЛЕНИЕ №2: Правильное формирование URL с subfolder и type ===
+                            video_info = node_output['videos'][0]
+                            video_filename = video_info['filename']
+                            subfolder = video_info.get('subfolder', '')
+                            video_type = video_info.get('type', 'output')
+                            
+                            # Формируем корректный URL для скачивания
+                            url = f"http://localhost:18188/view?filename={video_filename}&subfolder={subfolder}&type={video_type}"
+                            return jsonify({'video_url': url})
             except:
                 pass
             time.sleep(2)
