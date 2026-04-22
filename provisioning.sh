@@ -125,11 +125,8 @@ def generate():
                     outputs = data[prompt_id]['outputs']
                     for node_id, node_output in outputs.items():
                         if 'videos' in node_output:
-                            video_info = node_output['videos'][0]
-                            video_filename = video_info['filename']
-                            subfolder = video_info.get('subfolder', '')
-                            video_type = video_info.get('type', 'output')
-                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}&subfolder={subfolder}&type={video_type}'})
+                            video_filename = node_output['videos'][0]['filename']
+                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
             except:
                 pass
             time.sleep(2)
