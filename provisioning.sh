@@ -93,7 +93,7 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-COMFYUI_URL = "http://localhost:18188"
+COMFYUI_URL = "http://localhost:8188"
 
 # Получаем токен для авторизации
 VAST_TOKEN = os.environ.get("OPEN_BUTTON_TOKEN", "")
