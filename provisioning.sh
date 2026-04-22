@@ -78,7 +78,7 @@ echo "=== Installing dependencies ==="
 
 echo "=== Dependencies installed ==="
 
-# Создаём worker.py на порту 8289
+# Создаём worker.py на порту 8288
 cat > /workspace/ComfyUI/worker.py << 'EOF'
 import json, base64, time, os, requests
 from flask import Flask, request, jsonify
@@ -100,7 +100,8 @@ def generate():
         with open(img_path, 'wb') as f:
             f.write(base64.b64decode(img_b64))
         
-        workflow['148']['widgets_values'][0] = 'temp.jpg'
+        if '148' in workflow:
+            workflow['148']['inputs']['image'] = 'temp.jpg'
         
         for i in range(30):
             try:
@@ -137,8 +138,8 @@ def generate():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    print("Starting worker on port 8289...")
-    app.run(host='0.0.0.0', port=8289)
+    print("Starting worker on port 8288...")
+    app.run(host='0.0.0.0', port=8288)
 EOF
 
 echo "=== Provisioning script finished ==="
@@ -156,15 +157,15 @@ for i in {1..30}; do
     sleep 2
 done
 
-# Запускаем worker на порту 8289
+# Запускаем worker на порту 8288
 cd /workspace/ComfyUI
 nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
 
 sleep 5
 
 # Проверяем worker
-if curl -s http://localhost:8289/ > /dev/null 2>&1; then
-    echo "✅ Worker started on port 8289"
+if curl -s http://localhost:8288/ > /dev/null 2>&1; then
+    echo "✅ Worker started on port 8288"
 else
     echo "⚠️ Worker may not be ready yet"
 fi
