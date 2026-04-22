@@ -181,7 +181,16 @@ def generate():
                             subfolder = os.path.basename(os.path.dirname(f))
                             print(f"✅ Found video: {video_filename} in {subfolder}")
                             return jsonify({"video_url": f"{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}"})
-                    
+                                        # ПРЯМОЙ ПОИСК ВИДЕО
+                    print("🔍 FORCED VIDEO SEARCH...")
+                    video_file = "/workspace/ComfyUI/output/video/ComfyUI_00001_.mp4"
+                    if os.path.exists(video_file):
+                        real_path = os.path.realpath(video_file)
+                        if os.path.exists(real_path):
+                            video_filename = os.path.basename(real_path)
+                            subfolder = os.path.basename(os.path.dirname(real_path))
+                            print(f"✅ Found video: {video_filename} in {subfolder}")
+                            return jsonify({"video_url": f"{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}"})
                     return jsonify({'error': 'Video not found'}), 500
             except Exception as e:
                 print(f"Error: {e}")
