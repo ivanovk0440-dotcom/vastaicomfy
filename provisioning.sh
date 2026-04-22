@@ -100,7 +100,7 @@ def generate():
         with open(img_path, 'wb') as f:
             f.write(base64.b64decode(img_b64))
         
-        workflow['148']['widgets_values'][0] = 'temp.jpg'
+        workflow['148']['inputs']['image'] = 'temp.jpg'
         
         for i in range(30):
             try:
