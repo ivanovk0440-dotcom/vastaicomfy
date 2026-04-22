@@ -156,11 +156,6 @@ for i in {1..30}; do
     sleep 2
 done
 
-# === УБИВАЕМ CADDY ПЕРЕД ЗАПУСКОМ WORKER ===
-echo "Stopping Caddy to free port 8289..."
-pkill -f caddy || true
-sleep 2
-
 # Запускаем worker на порту 8289
 cd /workspace/ComfyUI
 nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
