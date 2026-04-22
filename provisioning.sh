@@ -57,11 +57,15 @@ for repo in \
     "https://github.com/kijai/ComfyUI-KJNodes.git" \
     "https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git" \
     "https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git" \
-    "https://github.com/yolain/ComfyUI-Easy-Use.git"
+    "https://github.com/yolain/ComfyUI-Easy-Use.git" \
+    "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git"
 do
     dir=$(basename "$repo" .git)
     if [ ! -d "$dir" ]; then
         git clone "$repo"
+        cd "$dir"
+        /venv/main/bin/pip install -r requirements.txt 2>/dev/null || true
+        cd ..
     fi
 done
 
@@ -74,71 +78,125 @@ echo "=== Installing dependencies ==="
     flask requests \
     opencv-python opencv-python-headless \
     accelerate transformers diffusers peft \
-    gguf ftfy einops sentencepiece protobuf
+    gguf ftfy einops sentencepiece protobuf \
+    numba scipy imageio imageio-ffmpeg numexpr
 
 echo "=== Dependencies installed ==="
 
-# Создаём worker.py на порту 8289
+# Создаём папку для видео
+mkdir -p /workspace/ComfyUI/output/video
+
+# Создаём worker.py на порту 8289 с поддержкой авторизации
 cat > /workspace/ComfyUI/worker.py << 'EOF'
-import json, base64, time, os, requests
+import json, base64, time, os, requests, glob
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
+
+COMFYUI_URL = "http://localhost:18188"
+
+# Получаем токен для авторизации
+VAST_TOKEN = os.environ.get("OPEN_BUTTON_TOKEN", "")
+auth = None
+if VAST_TOKEN:
+    auth = requests.auth.HTTPBasicAuth('vastai', VAST_TOKEN)
+    print(f"✅ Using token authentication (token: {VAST_TOKEN[:20]}...)")
+else:
+    print("⚠️ No token found, proceeding without authentication")
 
 @app.route('/generate/sync', methods=['POST'])
 def generate():
     try:
         data = request.json
-        workflow = data.get('workflow_json', {})
-        img_b64 = data.get('image_base64', '')
+        if "input" in data:
+            workflow = data["input"].get("workflow_json", {})
+            img_b64 = data["input"].get("image_base64", "")
+        else:
+            workflow = data.get("workflow_json", {})
+            img_b64 = data.get("image_base64", "")
         
         if not workflow or not img_b64:
             return jsonify({'error': 'Missing workflow or image'}), 400
         
-        os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
-        img_path = '/workspace/ComfyUI/input/temp.jpg'
-        with open(img_path, 'wb') as f:
+        # Принудительно создаём папку input
+        os.system("rm -rf /workspace/ComfyUI/input")
+        os.makedirs("/workspace/ComfyUI/input", exist_ok=True)
+        img_path = "/workspace/ComfyUI/input/temp.jpg"
+        with open(img_path, "wb") as f:
             f.write(base64.b64decode(img_b64))
+        print(f"✅ Image saved: {img_path}")
         
-        workflow['148']['inputs']['image'] = 'temp.jpg'
+        # Обновляем ноду LoadImage (148)
+        if "148" in workflow:
+            workflow["148"]["inputs"]["image"] = "temp.jpg"
+            print("✅ Updated node 148")
         
-        for i in range(30):
+        # Ждём ComfyUI
+        for i in range(60):
             try:
-                requests.get('http://localhost:18188/', timeout=2)
+                requests.get(f"{COMFYUI_URL}/", timeout=2, auth=auth)
+                print(f"✅ ComfyUI ready after {i+1} attempts")
                 break
             except:
                 time.sleep(1)
         
-        resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
+        # Отправляем запрос
+        resp = requests.post(f"{COMFYUI_URL}/prompt", json={"prompt": workflow}, auth=auth)
         if resp.status_code != 200:
             return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
         
-        prompt_id = resp.json()['prompt_id']
+        prompt_id = resp.json()["prompt_id"]
+        print(f"✅ Prompt ID: {prompt_id}")
         
-        timeout = 300
-        start = time.time()
-        while time.time() - start < timeout:
+        # Ждём результат
+        timeout = 600
+        start_time = time.time()
+        while time.time() - start_time < timeout:
             try:
-                resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
-                data = resp.json()
-                if data.get(prompt_id):
-                    outputs = data[prompt_id]['outputs']
+                hist = requests.get(f"{COMFYUI_URL}/history/{prompt_id}", auth=auth).json()
+                if hist.get(prompt_id):
+                    outputs = hist[prompt_id]["outputs"]
+                    print(f"=== OUTPUTS ===")
+                    print(json.dumps(outputs, indent=2))
+                    
                     for node_id, node_output in outputs.items():
-                        if 'videos' in node_output:
-                            video_filename = node_output['videos'][0]['filename']
-                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
-            except:
-                pass
+                        if 'videos' in node_output and node_output['videos']:
+                            v = node_output['videos'][0]
+                            subfolder = v.get('subfolder', '')
+                            if subfolder:
+                                return jsonify({"video_url": f"{COMFYUI_URL}/view?filename={v['filename']}&subfolder={subfolder}"})
+                            return jsonify({"video_url": f"{COMFYUI_URL}/view?filename={v['filename']}"})
+                        if 'video' in node_output and node_output['video']:
+                            v = node_output['video'][0]
+                            subfolder = v.get('subfolder', '')
+                            if subfolder:
+                                return jsonify({"video_url": f"{COMFYUI_URL}/view?filename={v['filename']}&subfolder={subfolder}"})
+                            return jsonify({"video_url": f"{COMFYUI_URL}/view?filename={v['filename']}"})
+                    
+                    # Поиск на диске
+                    print("🔍 Looking for video on disk...")
+                    for f in glob.glob("/workspace/ComfyUI/output/**/*.mp4", recursive=True):
+                        if os.path.isfile(f) and not os.path.islink(f):
+                            video_filename = os.path.basename(f)
+                            subfolder = os.path.basename(os.path.dirname(f))
+                            print(f"✅ Found video: {video_filename} in {subfolder}")
+                            return jsonify({"video_url": f"{COMFYUI_URL}/view?filename={video_filename}&subfolder={subfolder}"})
+                    
+                    return jsonify({'error': 'Video not found'}), 500
+            except Exception as e:
+                print(f"Error: {e}")
             time.sleep(2)
         
-        return jsonify({'error': 'Timeout waiting for video'}), 500
-        
+        return jsonify({'error': 'Timeout'}), 500
     except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print("Starting worker on port 8289...")
-    app.run(host='0.0.0.0', port=8289)
+    app.run(host="0.0.0.0", port=8289)
 EOF
 
 echo "=== Provisioning script finished ==="
@@ -158,6 +216,7 @@ done
 
 # Запускаем worker на порту 8289
 cd /workspace/ComfyUI
+pkill -f worker.py 2>/dev/null || true
 nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
 
 sleep 5
@@ -167,6 +226,7 @@ if curl -s http://localhost:8289/ > /dev/null 2>&1; then
     echo "✅ Worker started on port 8289"
 else
     echo "⚠️ Worker may not be ready yet"
+    tail -20 /workspace/worker.log
 fi
 
 echo "=== Provisioning complete ==="
