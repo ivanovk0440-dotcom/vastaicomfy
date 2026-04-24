@@ -117,16 +117,22 @@ def generate():
         prompt_id = resp.json()['prompt_id']
         print(f"[Worker] Prompt ID: {prompt_id}")
         
-        timeout = 300
+        # ✅ УВЕЛИЧЕННЫЙ ТАЙМАУТ: 20 минут вместо 5
+        timeout = 1200
         start = time.time()
+        check_count = 0
+        
         while time.time() - start < timeout:
+            check_count += 1
+            elapsed = int(time.time() - start)
+            
             try:
                 resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
                 data = resp.json()
                 
                 if data.get(prompt_id):
                     outputs = data[prompt_id]['outputs']
-                    print(f"[Worker] Found outputs with keys: {list(outputs.keys())}")
+                    print(f"[Worker] Проверка #{check_count} ({elapsed}s): Found outputs with keys: {list(outputs.keys())}")
                     
                     # Поиск видео в outputs
                     for node_id, node_output in outputs.items():
@@ -134,46 +140,78 @@ def generate():
                             video_filename = node_output['videos'][0]['filename']
                             print(f"[Worker] ✅ Found video in node {node_id}: {video_filename}")
                             
-                            # ✅ СКАЧИВАЕМ ВИДЕО И КОДИРУЕМ В BASE64
+                            # Ищем видео на диске
                             video_path = f'/workspace/ComfyUI/output/{video_filename}'
                             
-                            # Ждём пока файл появится
-                            for wait_attempt in range(30):
+                            # Ждём пока файл появится и будет полным
+                            file_wait_count = 0
+                            while file_wait_count < 60:
                                 if os.path.exists(video_path):
                                     file_size = os.path.getsize(video_path)
-                                    if file_size > 1000000:  # > 1MB
-                                        break
+                                    print(f"[Worker] File exists: {file_size} bytes")
+                                    
+                                    if file_size > 5000000:  # > 5MB - файл достаточно большой
+                                        print(f"[Worker] ✅ Video file ready: {video_path}")
+                                        
+                                        # Читаем видео
+                                        with open(video_path, 'rb') as f:
+                                            video_bytes = f.read()
+                                        
+                                        video_b64 = base64.b64encode(video_bytes).decode()
+                                        
+                                        print(f"[Worker] ✅ Video encoded: {file_size} bytes -> {len(video_b64)} chars")
+                                        
+                                        return jsonify({
+                                            'success': True,
+                                            'video_filename': video_filename,
+                                            'video_base64': video_b64,
+                                            'file_size': file_size,
+                                            'elapsed': elapsed
+                                        }), 200
+                                
+                                file_wait_count += 1
                                 time.sleep(1)
                             
-                            if not os.path.exists(video_path):
-                                print(f"[Worker] ❌ Video file not found: {video_path}")
-                                return jsonify({'error': f'Video file not found: {video_path}'}), 500
-                            
-                            # Читаем и кодируем видео
-                            with open(video_path, 'rb') as f:
-                                video_bytes = f.read()
-                            
-                            video_b64 = base64.b64encode(video_bytes).decode()
-                            file_size = os.path.getsize(video_path)
-                            
-                            print(f"[Worker] ✅ Video encoded to base64: {file_size} bytes -> {len(video_b64)} chars")
-                            
-                            return jsonify({
-                                'success': True,
-                                'video_filename': video_filename,
-                                'video_base64': video_b64,
-                                'file_size': file_size,
-                                'node_id': node_id
-                            }), 200
+                            print(f"[Worker] ❌ Video file not found or too small: {video_path}")
+                            return jsonify({'error': f'Video file not found: {video_path}'}), 500
                     
-                    print(f"[Worker] ⚠️ No videos in outputs")
-                    
+                    print(f"[Worker] Проверка #{check_count} ({elapsed}s): No videos in outputs yet")
+                else:
+                    if check_count % 6 == 0:  # Логируем каждые 10 сек
+                        print(f"[Worker] Проверка #{check_count} ({elapsed}s): Waiting for generation...")
+                        
             except Exception as e:
-                print(f"[Worker] Error: {e}")
+                print(f"[Worker] Error checking history: {e}")
             
+            time.sleep(2)  # Проверяем каждые 2 сек
+        
+        # FALLBACK: Поиск на диске если история не помогла
+        print(f"[Worker] History timeout after {timeout}s, searching on disk...")
+        for attempt in range(30):
+            videos = glob.glob('/workspace/ComfyUI/output/**/*.mp4', recursive=True)
+            if videos:
+                latest_video = max(videos, key=os.path.getctime)
+                filename = os.path.basename(latest_video)
+                file_size = os.path.getsize(latest_video)
+                
+                print(f"[Worker] ✅ Found video on disk: {filename} ({file_size} bytes)")
+                
+                with open(latest_video, 'rb') as f:
+                    video_bytes = f.read()
+                
+                video_b64 = base64.b64encode(video_bytes).decode()
+                
+                return jsonify({
+                    'success': True,
+                    'video_filename': filename,
+                    'video_base64': video_b64,
+                    'file_size': file_size
+                }), 200
+            
+            print(f"[Worker] Disk search attempt {attempt+1}/30...")
             time.sleep(2)
         
-        return jsonify({'error': 'Timeout waiting for video'}), 500
+        return jsonify({'error': 'Timeout waiting for video (1200s exceeded)'}), 500
         
     except Exception as e:
         print(f"[Worker] ❌ ERROR: {e}")
