@@ -80,8 +80,9 @@ echo "=== Dependencies installed ==="
 
 # Создаём worker.py на порту 8289
 cat > /workspace/ComfyUI/worker.py << 'EOF'
-import json, base64, time, os, requests
+import json, base64, time, os, requests, glob
 from flask import Flask, request, jsonify
+import traceback
 
 app = Flask(__name__)
 
@@ -114,6 +115,7 @@ def generate():
             return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
         
         prompt_id = resp.json()['prompt_id']
+        print(f"[Worker] Prompt ID: {prompt_id}")
         
         timeout = 300
         start = time.time()
@@ -121,24 +123,58 @@ def generate():
             try:
                 resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
                 data = resp.json()
+                
                 if data.get(prompt_id):
                     outputs = data[prompt_id]['outputs']
+                    print(f"[Worker] Found outputs with keys: {list(outputs.keys())}")
+                    
+                    # Поиск видео в outputs
                     for node_id, node_output in outputs.items():
-                        if 'videos' in node_output:
+                        if 'videos' in node_output and node_output['videos']:
                             video_filename = node_output['videos'][0]['filename']
-                            return jsonify({'video_url': f'http://localhost:18188/view?filename={video_filename}'})
-            except:
-                pass
+                            print(f"[Worker] ✅ Found video in node {node_id}: {video_filename}")
+                            
+                            return jsonify({
+                                'success': True,
+                                'video_filename': video_filename,
+                                'video_url': f'http://localhost:18188/view?filename={video_filename}',
+                                'node_id': node_id
+                            }), 200
+                    
+                    print(f"[Worker] ⚠️ No videos in outputs. Structure:")
+                    for node_id, node_output in outputs.items():
+                        print(f"  Node {node_id}: {list(node_output.keys())}")
+                    
+            except Exception as e:
+                print(f"[Worker] Error checking history: {e}")
+            
             time.sleep(2)
+        
+        # Если history не вернул видео - ищем на диске
+        print(f"[Worker] History timeout, searching on disk...")
+        for attempt in range(30):
+            videos = glob.glob('/workspace/ComfyUI/output/**/*.mp4', recursive=True)
+            if videos:
+                latest_video = max(videos, key=os.path.getctime)
+                filename = os.path.basename(latest_video)
+                print(f"[Worker] ✅ Found video on disk: {filename}")
+                return jsonify({
+                    'success': True,
+                    'video_filename': filename,
+                    'video_url': f'http://localhost:18188/view?filename={filename}'
+                }), 200
+            time.sleep(1)
         
         return jsonify({'error': 'Timeout waiting for video'}), 500
         
     except Exception as e:
+        print(f"[Worker] ❌ ERROR: {e}")
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print("Starting worker on port 8289...")
-    app.run(host='0.0.0.0', port=8289)
+    app.run(host='0.0.0.0', port=8289, debug=False)
 EOF
 
 echo "=== Provisioning script finished ==="
