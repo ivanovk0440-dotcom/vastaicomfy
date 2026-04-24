@@ -134,36 +134,44 @@ def generate():
                             video_filename = node_output['videos'][0]['filename']
                             print(f"[Worker] ✅ Found video in node {node_id}: {video_filename}")
                             
+                            # ✅ СКАЧИВАЕМ ВИДЕО И КОДИРУЕМ В BASE64
+                            video_path = f'/workspace/ComfyUI/output/{video_filename}'
+                            
+                            # Ждём пока файл появится
+                            for wait_attempt in range(30):
+                                if os.path.exists(video_path):
+                                    file_size = os.path.getsize(video_path)
+                                    if file_size > 1000000:  # > 1MB
+                                        break
+                                time.sleep(1)
+                            
+                            if not os.path.exists(video_path):
+                                print(f"[Worker] ❌ Video file not found: {video_path}")
+                                return jsonify({'error': f'Video file not found: {video_path}'}), 500
+                            
+                            # Читаем и кодируем видео
+                            with open(video_path, 'rb') as f:
+                                video_bytes = f.read()
+                            
+                            video_b64 = base64.b64encode(video_bytes).decode()
+                            file_size = os.path.getsize(video_path)
+                            
+                            print(f"[Worker] ✅ Video encoded to base64: {file_size} bytes -> {len(video_b64)} chars")
+                            
                             return jsonify({
                                 'success': True,
                                 'video_filename': video_filename,
-                                'video_url': f'http://localhost:18188/view?filename={video_filename}',
+                                'video_base64': video_b64,
+                                'file_size': file_size,
                                 'node_id': node_id
                             }), 200
                     
-                    print(f"[Worker] ⚠️ No videos in outputs. Structure:")
-                    for node_id, node_output in outputs.items():
-                        print(f"  Node {node_id}: {list(node_output.keys())}")
+                    print(f"[Worker] ⚠️ No videos in outputs")
                     
             except Exception as e:
-                print(f"[Worker] Error checking history: {e}")
+                print(f"[Worker] Error: {e}")
             
             time.sleep(2)
-        
-        # Если history не вернул видео - ищем на диске
-        print(f"[Worker] History timeout, searching on disk...")
-        for attempt in range(30):
-            videos = glob.glob('/workspace/ComfyUI/output/**/*.mp4', recursive=True)
-            if videos:
-                latest_video = max(videos, key=os.path.getctime)
-                filename = os.path.basename(latest_video)
-                print(f"[Worker] ✅ Found video on disk: {filename}")
-                return jsonify({
-                    'success': True,
-                    'video_filename': filename,
-                    'video_url': f'http://localhost:18188/view?filename={filename}'
-                }), 200
-            time.sleep(1)
         
         return jsonify({'error': 'Timeout waiting for video'}), 500
         
