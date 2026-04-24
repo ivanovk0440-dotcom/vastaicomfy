@@ -176,15 +176,18 @@ def generate():
                                             # Проверяем файл
                                             if os.path.exists(video_path):
                                                 file_size = os.path.getsize(video_path)
-                                                log(f"   ✅ FILE EXISTS: {file_size} bytes")
+                                                log(f"   ✅ FILE EXISTS: {file_size} bytes ({file_size/1024:.1f}KB)")
                                                 
-                                                if file_size > 1000000:  # > 1MB
+                                                # ✅ ИСПРАВЛЕНО: проверяем > 100KB вместо 1MB
+                                                if file_size > 100000:
                                                     log(f"   ✅ FILE IS READY!")
                                                     
                                                     # Читаем видео
                                                     log(f"   📖 Reading file...")
                                                     with open(video_path, 'rb') as f:
                                                         video_bytes = f.read()
+                                                    
+                                                    log(f"   📊 File read: {len(video_bytes)} bytes")
                                                     
                                                     log(f"   🔐 Encoding to base64...")
                                                     video_b64 = base64.b64encode(video_bytes).decode()
@@ -197,7 +200,7 @@ def generate():
                                                         'elapsed': int(time.time() - start)
                                                     }
                                                     
-                                                    log(f"✅ SUCCESS! Video ready: {len(video_bytes)} bytes in {int(time.time()-start)}s")
+                                                    log(f"✅ SUCCESS! Video ready: {len(video_bytes)} bytes ({len(video_bytes)/1024/1024:.1f}MB in base64) in {int(time.time()-start)}s")
                                                     return jsonify(result), 200
                                                 else:
                                                     log(f"   ⏳ File too small ({file_size} bytes), waiting...")
@@ -212,6 +215,7 @@ def generate():
                         
             except Exception as e:
                 log(f"  Error: {e}")
+                traceback.print_exc()
             
             time.sleep(2)
         
