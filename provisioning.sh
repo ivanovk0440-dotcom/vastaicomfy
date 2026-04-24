@@ -150,85 +150,73 @@ def generate():
                 if history.get(prompt_id):
                     outputs = history[prompt_id]['outputs']
                     
-                    # ✅ DEBUG: Выводим структуру outputs
-                    if check_count == 1 or check_count % 50 == 0:
-                        log(f"\n--- OUTPUTS STRUCTURE (Check #{check_count}, {elapsed}s) ---")
-                        for node_id in outputs.keys():
-                            node_out = outputs[node_id]
-                            keys = list(node_out.keys())
-                            log(f"  Node {node_id}: {keys}")
-                            
-                            # Выводим подробно каждый ключ
-                            for key in keys:
-                                value = node_out[key]
-                                if isinstance(value, list):
-                                    log(f"    - {key}: list[{len(value)}] = {str(value)[:100]}")
-                                elif isinstance(value, dict):
-                                    log(f"    - {key}: dict with keys {list(value.keys())}")
-                                else:
-                                    log(f"    - {key}: {type(value).__name__} = {str(value)[:100]}")
-                        log(f"--- END OUTPUTS ---\n")
-                    
-                    # Ищем видео во всех нодах и всех ключах
+                    # Ищем видео в outputs
                     for node_id, node_output in outputs.items():
-                        for key, value in node_output.items():
-                            # Ищем 'mp4' в ключе или значении
-                            if 'video' in key.lower() or 'mp4' in str(value).lower():
-                                log(f"🎬 FOUND POTENTIAL VIDEO in node {node_id}, key '{key}':")
-                                log(f"   Value: {str(value)[:200]}")
-                            
-                            # Проверяем videos
-                            if key == 'videos' and isinstance(value, list) and value:
-                                log(f"✅ FOUND VIDEOS in node {node_id}!")
-                                for i, video_info in enumerate(value):
-                                    log(f"   Video {i}: {video_info}")
-                                    if isinstance(video_info, dict) and 'filename' in video_info:
-                                        filename = video_info['filename']
-                                        video_path = f'/workspace/ComfyUI/output/{filename}'
-                                        log(f"   ✅ Video filename: {filename}")
-                                        log(f"   ✅ Video path: {video_path}")
-                                        
-                                        # Проверяем есть ли файл
-                                        if os.path.exists(video_path):
-                                            file_size = os.path.getsize(video_path)
-                                            log(f"   ✅ FILE EXISTS: {file_size} bytes")
+                        # Проверяем оба варианта: 'videos' и 'images' (в images может быть mp4)
+                        for key in ['videos', 'images']:
+                            if key in node_output:
+                                items = node_output[key]
+                                if isinstance(items, list) and items:
+                                    for item in items:
+                                        if isinstance(item, dict) and 'filename' in item:
+                                            filename = item['filename']
+                                            subfolder = item.get('subfolder', '')
                                             
-                                            if file_size > 1000000:
-                                                log(f"   ✅ FILE IS READY!")
+                                            # Строим полный путь с учетом subfolder
+                                            if subfolder:
+                                                video_path = f'/workspace/ComfyUI/output/{subfolder}/{filename}'
+                                            else:
+                                                video_path = f'/workspace/ComfyUI/output/{filename}'
+                                            
+                                            log(f"🎬 Found video in node {node_id}, key '{key}':")
+                                            log(f"   Filename: {filename}")
+                                            log(f"   Subfolder: {subfolder}")
+                                            log(f"   Full path: {video_path}")
+                                            
+                                            # Проверяем файл
+                                            if os.path.exists(video_path):
+                                                file_size = os.path.getsize(video_path)
+                                                log(f"   ✅ FILE EXISTS: {file_size} bytes")
                                                 
-                                                # Читаем видео
-                                                with open(video_path, 'rb') as f:
-                                                    video_bytes = f.read()
-                                                
-                                                video_b64 = base64.b64encode(video_bytes).decode()
-                                                
-                                                result = {
-                                                    'success': True,
-                                                    'video_filename': filename,
-                                                    'video_base64': video_b64,
-                                                    'file_size': len(video_bytes),
-                                                    'elapsed': int(time.time() - start)
-                                                }
-                                                
-                                                log(f"✅ SUCCESS! Video sent: {len(video_bytes)} bytes")
-                                                return jsonify(result), 200
-                                        else:
-                                            log(f"   ❌ FILE NOT EXISTS YET")
+                                                if file_size > 1000000:  # > 1MB
+                                                    log(f"   ✅ FILE IS READY!")
+                                                    
+                                                    # Читаем видео
+                                                    log(f"   📖 Reading file...")
+                                                    with open(video_path, 'rb') as f:
+                                                        video_bytes = f.read()
+                                                    
+                                                    log(f"   🔐 Encoding to base64...")
+                                                    video_b64 = base64.b64encode(video_bytes).decode()
+                                                    
+                                                    result = {
+                                                        'success': True,
+                                                        'video_filename': filename,
+                                                        'video_base64': video_b64,
+                                                        'file_size': len(video_bytes),
+                                                        'elapsed': int(time.time() - start)
+                                                    }
+                                                    
+                                                    log(f"✅ SUCCESS! Video ready: {len(video_bytes)} bytes in {int(time.time()-start)}s")
+                                                    return jsonify(result), 200
+                                                else:
+                                                    log(f"   ⏳ File too small ({file_size} bytes), waiting...")
+                                            else:
+                                                log(f"   ⏳ FILE NOT EXISTS YET, waiting...")
                     
                     if check_count % 50 == 0:
-                        log(f"  Check #{check_count} ({elapsed}s): still waiting...")
+                        log(f"  Check #{check_count} ({elapsed}s): waiting for video...")
                 else:
                     if check_count % 50 == 0:
                         log(f"  Check #{check_count} ({elapsed}s): no outputs yet...")
                         
             except Exception as e:
                 log(f"  Error: {e}")
-                traceback.print_exc()
             
             time.sleep(2)
         
         log(f"❌ TIMEOUT after {timeout}s")
-        return jsonify({'error': 'Timeout'}), 500
+        return jsonify({'error': 'Timeout waiting for video'}), 500
         
     except Exception as e:
         log(f"❌ ERROR: {e}")
