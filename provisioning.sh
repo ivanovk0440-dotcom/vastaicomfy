@@ -48,8 +48,8 @@ wget -q --show-progress -O models/rife/rife47.pth \
 
 echo "=== All models downloaded ==="
 
-# Устанавливаем кастомные ноды
-echo "=== Installing custom nodes ==="
+# Устанавливаем/обновляем кастомные ноды
+echo "=== Installing/updating custom nodes ==="
 cd custom_nodes
 
 for repo in \
@@ -61,11 +61,51 @@ for repo in \
 do
     dir=$(basename "$repo" .git)
     if [ ! -d "$dir" ]; then
+        echo "Cloning $dir..."
         git clone "$repo"
+    else
+        echo "Updating $dir..."
+        git -C "$dir" pull
     fi
 done
 
-echo "=== Custom nodes installed ==="
+echo "=== Custom nodes installed/updated ==="
+
+# =====================================================
+# ПАТЧ: исправляем баг multitalk_audio_stride
+# UnboundLocalError в nodes_sampler.py (строка ~822)
+# Вставляем инициализацию переменных через Python-скрипт
+# =====================================================
+echo "=== Applying multitalk_audio_stride patch ==="
+
+SAMPLER_FILE="/workspace/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/nodes_sampler.py"
+
+/venv/main/bin/python3 - <<'PYEOF'
+import re
+
+filepath = "/workspace/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/nodes_sampler.py"
+
+with open(filepath, "r") as f:
+    content = f.read()
+
+# Строка-маркер куда вставить инициализацию (блок инициализации переменных)
+# Ищем строку с инициализацией control_latents — она точно есть в файле
+marker = "control_latents = control_camera_latents = clip_fea = clip_fea_neg"
+
+init_block = """        multitalk_audio_stride = None
+        multitalk_audio_input = None
+        """
+
+if "multitalk_audio_stride = None" not in content:
+    content = content.replace(marker, init_block + marker, 1)
+    with open(filepath, "w") as f:
+        f.write(content)
+    print("✅ Patch applied: multitalk_audio_stride initialized")
+else:
+    print("✅ Patch already applied, skipping")
+PYEOF
+
+echo "=== Patch done ==="
 
 # Устанавливаем зависимости
 echo "=== Installing dependencies ==="
@@ -150,9 +190,7 @@ def generate():
                 if history.get(prompt_id):
                     outputs = history[prompt_id]['outputs']
                     
-                    # Ищем видео в outputs
                     for node_id, node_output in outputs.items():
-                        # Проверяем оба варианта: 'videos' и 'images' (в images может быть mp4)
                         for key in ['videos', 'images']:
                             if key in node_output:
                                 items = node_output[key]
@@ -162,7 +200,6 @@ def generate():
                                             filename = item['filename']
                                             subfolder = item.get('subfolder', '')
                                             
-                                            # Строим полный путь с учетом subfolder
                                             if subfolder:
                                                 video_path = f'/workspace/ComfyUI/output/{subfolder}/{filename}'
                                             else:
@@ -173,16 +210,13 @@ def generate():
                                             log(f"   Subfolder: {subfolder}")
                                             log(f"   Full path: {video_path}")
                                             
-                                            # Проверяем файл
                                             if os.path.exists(video_path):
                                                 file_size = os.path.getsize(video_path)
                                                 log(f"   ✅ FILE EXISTS: {file_size} bytes ({file_size/1024:.1f}KB)")
                                                 
-                                                # ✅ ИСПРАВЛЕНО: проверяем > 100KB вместо 1MB
                                                 if file_size > 100000:
                                                     log(f"   ✅ FILE IS READY!")
                                                     
-                                                    # Читаем видео
                                                     log(f"   📖 Reading file...")
                                                     with open(video_path, 'rb') as f:
                                                         video_bytes = f.read()
@@ -200,7 +234,7 @@ def generate():
                                                         'elapsed': int(time.time() - start)
                                                     }
                                                     
-                                                    log(f"✅ SUCCESS! Video ready: {len(video_bytes)} bytes ({len(video_bytes)/1024/1024:.1f}MB in base64) in {int(time.time()-start)}s")
+                                                    log(f"✅ SUCCESS! Video ready: {len(video_bytes)} bytes in {int(time.time()-start)}s")
                                                     return jsonify(result), 200
                                                 else:
                                                     log(f"   ⏳ File too small ({file_size} bytes), waiting...")
