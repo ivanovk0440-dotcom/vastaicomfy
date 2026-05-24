@@ -4,14 +4,14 @@ set -e
 echo "=== Starting provisioning ==="
 cd /workspace/ComfyUI
 
-# Создаём папки для моделей
+# 1. Создаём папки для моделей
 mkdir -p models/diffusion_models
 mkdir -p models/text_encoders
 mkdir -p models/vae
 mkdir -p models/loras
 mkdir -p models/rife
 
-# 1-7. Загрузка моделей (используем -c для докачки, если файл поврежден)
+# 2. Загрузка моделей (используем wget -c, чтобы докачивать в случае обрыва)
 echo "=== Checking Models ==="
 wget -c -q --show-progress -O models/vae/wan_2.1_vae.safetensors "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors?download=1"
 wget -c -q --show-progress -O models/text_encoders/nsfw_wan_umt5-xxl_fp8_scaled.safetensors "https://huggingface.co/NSFW-API/NSFW-Wan-UMT5-XXL/resolve/main/nsfw_wan_umt5-xxl_fp8_scaled.safetensors?download=1"
@@ -21,9 +21,7 @@ wget -c -q --show-progress -O models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora
 wget -c -q --show-progress -O models/loras/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors "https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/LoRAs/Wan22-Lightning/old/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors?download=1"
 wget -c -q --show-progress -O models/rife/rife47.pth "https://huggingface.co/jasonot/mycomfyui/resolve/main/rife47.pth?download=1"
 
-echo "=== All models checked ==="
-
-# Устанавливаем или ОБНОВЛЯЕМ кастомные ноды
+# 3. Установка и обновление кастомных нод
 echo "=== Installing/Updating custom nodes ==="
 cd /workspace/ComfyUI/custom_nodes
 
@@ -39,58 +37,71 @@ for repo in "${REPOS[@]}"; do
     dir=$(basename "$repo" .git)
     if [ -d "$dir" ]; then
         echo "Updating $dir..."
-        cd "$dir" && git fetch && git pull && cd ..
+        cd "$dir"
+        git reset --hard  # Удаляем старые неудачные правки sed
+        git fetch
+        git pull
+        cd ..
     else
         echo "Cloning $dir..."
         git clone "$repo"
     fi
 done
 
-# --- ХОТФИКС ОШИБКИ multitalk_audio_stride ---
-# Если обновление через git pull не помогло, принудительно патчим код
-SAMPLER_FILE="/workspace/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/nodes_sampler.py"
-if [ -f "$SAMPLER_FILE" ]; then
-    echo "=== Applying hotfix for multitalk_audio_stride ==="
-    # Вставляем инициализацию переменной в начало метода process, если её там нет
-    sed -i '/def process(/a \        multitalk_audio_stride = None' "$SAMPLER_FILE"
-    # Удаляем дубликаты, если скрипт запущен второй раз
-    sed -i '/multitalk_audio_stride = None/{n;/multitalk_audio_stride = None/d;}' "$SAMPLER_FILE"
-fi
-# ---------------------------------------------
+# 4. БЕЗОПАСНЫЙ ПАТЧ ошибки multitalk_audio_stride через Python
+echo "=== Patching nodes_sampler.py ==="
+/venv/main/bin/python3 << 'EOF'
+import os
 
-echo "=== Custom nodes updated and patched ==="
+file_path = '/workspace/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/nodes_sampler.py'
+if os.path.exists(file_path):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
 
-# Устанавливаем зависимости
-echo "=== Installing/Updating dependencies ==="
+    new_lines = []
+    patched = False
+    for line in lines:
+        new_lines.append(line)
+        # Ищем начало функции process и вставляем фикс сразу после неё
+        if 'def process(' in line and not patched:
+            # Используем 8 пробелов для отступа (стандарт для методов класса)
+            indent = "        " 
+            new_lines.append(f"{indent}multitalk_audio_stride = None\n")
+            patched = True
+            print("✅ Successfully patched nodes_sampler.py")
+
+    if patched:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.writelines(new_lines)
+    else:
+        print("⚠️ Could not find 'def process(' to patch")
+else:
+    print("❌ nodes_sampler.py not found")
+EOF
+
+# 5. Установка зависимостей
+echo "=== Installing dependencies ==="
 /venv/main/bin/pip install --quiet --upgrade pip
 /venv/main/bin/pip install --quiet \
-    flask requests \
-    opencv-python opencv-python-headless \
+    flask requests opencv-python opencv-python-headless \
     accelerate transformers diffusers peft \
     gguf ftfy einops sentencepiece protobuf
 
-# Установка специфичных зависимостей для WanVideo
+# Доп. зависимости для WanVideo
 if [ -f "ComfyUI-WanVideoWrapper/requirements.txt" ]; then
     /venv/main/bin/pip install --quiet -r ComfyUI-WanVideoWrapper/requirements.txt
 fi
 
-echo "=== Dependencies installed ==="
-
-# Создаём worker.py (код без изменений)
+# 6. Создание worker.py
 cat > /workspace/ComfyUI/worker.py << 'EOF'
-import json, base64, time, os, requests, glob
+import json, base64, time, os, requests, traceback, sys
 from flask import Flask, request, jsonify
-import traceback
-import sys
 
 app = Flask(__name__)
 
 def log(msg):
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    log_msg = f"[{timestamp}] [Worker] {msg}"
-    print(log_msg, flush=True)
-    sys.stderr.write(log_msg + "\n")
-    sys.stderr.flush()
+    print(f"[{timestamp}] [Worker] {msg}", flush=True)
 
 @app.route('/generate/sync', methods=['POST'])
 def generate():
@@ -101,10 +112,7 @@ def generate():
         img_b64 = data.get('image_base64', '')
         
         if not workflow or not img_b64:
-            log("❌ Missing workflow or image")
             return jsonify({'error': 'Missing workflow or image'}), 400
-        
-        log(f"✅ Received workflow ({len(workflow)} nodes)")
         
         os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
         img_path = '/workspace/ComfyUI/input/temp.jpg'
@@ -113,71 +121,51 @@ def generate():
         
         workflow['148']['inputs']['image'] = 'temp.jpg'
         
-        log("⏳ Waiting for ComfyUI...")
-        for i in range(30):
+        # Ждем ComfyUI
+        for _ in range(30):
             try:
                 requests.get('http://localhost:18188/', timeout=2)
-                log("✅ ComfyUI is ready")
                 break
             except:
                 time.sleep(1)
         
-        log("📤 Sending workflow to ComfyUI...")
         resp = requests.post('http://localhost:18188/prompt', json={'prompt': workflow})
         if resp.status_code != 200:
-            log(f"❌ ComfyUI error: {resp.text}")
             return jsonify({'error': f'ComfyUI error: {resp.text}'}), 500
         
         prompt_id = resp.json()['prompt_id']
         log(f"✅ Prompt ID: {prompt_id}")
         
-        timeout = 1200
         start = time.time()
-        check_count = 0
-        
-        log(f"⏳ Waiting for video (timeout: {timeout}s)...")
-        
-        while time.time() - start < timeout:
-            check_count += 1
-            elapsed = int(time.time() - start)
-            
+        while time.time() - start < 1200:
             try:
-                resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
-                history = resp.json()
+                history_resp = requests.get(f'http://localhost:18188/history/{prompt_id}')
+                history = history_resp.json()
                 
                 if history.get(prompt_id):
                     outputs = history[prompt_id]['outputs']
                     for node_id, node_output in outputs.items():
                         for key in ['videos', 'images']:
                             if key in node_output:
-                                items = node_output[key]
-                                if isinstance(items, list) and items:
-                                    for item in items:
-                                        if isinstance(item, dict) and 'filename' in item:
-                                            filename = item['filename']
-                                            subfolder = item.get('subfolder', '')
-                                            video_path = f'/workspace/ComfyUI/output/{subfolder}/{filename}' if subfolder else f'/workspace/ComfyUI/output/{filename}'
-                                            
-                                            if os.path.exists(video_path):
-                                                file_size = os.path.getsize(video_path)
-                                                if file_size > 100000:
-                                                    with open(video_path, 'rb') as f:
-                                                        video_bytes = f.read()
-                                                    video_b64 = base64.b64encode(video_bytes).decode()
-                                                    log(f"✅ SUCCESS! Video ready")
-                                                    return jsonify({
-                                                        'success': True,
-                                                        'video_filename': filename,
-                                                        'video_base64': video_b64,
-                                                        'file_size': len(video_bytes),
-                                                        'elapsed': int(time.time() - start)
-                                                    }), 200
-            except Exception as e:
-                log(f"  Error: {e}")
+                                for item in node_output[key]:
+                                    filename = item['filename']
+                                    sub = item.get('subfolder', '')
+                                    v_path = f'/workspace/ComfyUI/output/{sub}/{filename}' if sub else f'/workspace/ComfyUI/output/{filename}'
+                                    
+                                    if os.path.exists(v_path) and os.path.getsize(v_path) > 100000:
+                                        with open(v_path, 'rb') as f:
+                                            v_b64 = base64.b64encode(f.read()).decode()
+                                        return jsonify({
+                                            'success': True,
+                                            'video_base64': v_b64,
+                                            'elapsed': int(time.time() - start)
+                                        }), 200
+            except:
+                pass
             time.sleep(2)
-        return jsonify({'error': 'Timeout waiting for video'}), 500
+        return jsonify({'error': 'Timeout'}), 500
     except Exception as e:
-        log(f"❌ ERROR: {e}")
+        log(f"❌ ERROR: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])
@@ -185,15 +173,12 @@ def health():
     return jsonify({'status': 'ok'}), 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8289, debug=False, threaded=True)
+    app.run(host='0.0.0.0', port=8289, threaded=True)
 EOF
 
-# Запуск (с проверкой портов)
-echo "=== Starting Services ==="
-cd /workspace/ComfyUI
-# Убиваем старый воркер, если он есть
+# 7. Запуск
+echo "=== Starting Worker ==="
 pkill -f worker.py || true
-
 nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
 
 echo "=== Provisioning complete ==="
