@@ -48,9 +48,9 @@ wget -q --show-progress -O models/rife/rife47.pth \
 
 echo "=== All models downloaded ==="
 
-# Устанавливаем/обновляем кастомные ноды
-echo "=== Installing/updating custom nodes ==="
-cd custom_nodes
+# Устанавливаем кастомные ноды
+echo "=== Installing custom nodes ==="
+cd /workspace/ComfyUI/custom_nodes
 
 for repo in \
     "https://github.com/kijai/ComfyUI-WanVideoWrapper.git" \
@@ -61,60 +61,58 @@ for repo in \
 do
     dir=$(basename "$repo" .git)
     if [ ! -d "$dir" ]; then
-        echo "Cloning $dir..."
+        echo "--- Cloning $dir ---"
         git clone "$repo"
     else
-        echo "Updating $dir..."
-        git -C "$dir" pull
+        echo "--- $dir already exists, pulling latest ---"
+        cd "$dir"
+        git pull || true
+        cd /workspace/ComfyUI/custom_nodes
     fi
 done
 
-echo "=== Custom nodes installed/updated ==="
+echo "=== Installing dependencies for each custom node ==="
 
-# =====================================================
-# ПАТЧ: исправляем баг multitalk_audio_stride
-# UnboundLocalError в nodes_sampler.py (строка ~822)
-# Вставляем инициализацию переменных через Python-скрипт
-# =====================================================
-echo "=== Applying multitalk_audio_stride patch ==="
+# Устанавливаем зависимости для каждой ноды
+for dir in \
+    "ComfyUI-WanVideoWrapper" \
+    "ComfyUI-KJNodes" \
+    "ComfyUI-Custom-Scripts" \
+    "ComfyUI-Frame-Interpolation" \
+    "ComfyUI-Easy-Use"
+do
+    if [ -f "/workspace/ComfyUI/custom_nodes/$dir/requirements.txt" ]; then
+        echo "--- Installing requirements for $dir ---"
+        /venv/main/bin/pip install --quiet -r "/workspace/ComfyUI/custom_nodes/$dir/requirements.txt" || echo "⚠️ Some requirements failed for $dir"
+    else
+        echo "--- No requirements.txt for $dir ---"
+    fi
+done
 
-SAMPLER_FILE="/workspace/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/nodes_sampler.py"
+echo "=== Custom nodes installed ==="
 
-/venv/main/bin/python3 - <<'PYEOF'
-import re
-
-filepath = "/workspace/ComfyUI/custom_nodes/ComfyUI-WanVideoWrapper/nodes_sampler.py"
-
-with open(filepath, "r") as f:
-    content = f.read()
-
-# Строка-маркер куда вставить инициализацию (блок инициализации переменных)
-# Ищем строку с инициализацией control_latents — она точно есть в файле
-marker = "control_latents = control_camera_latents = clip_fea = clip_fea_neg"
-
-init_block = """        multitalk_audio_stride = None
-        multitalk_audio_input = None
-        """
-
-if "multitalk_audio_stride = None" not in content:
-    content = content.replace(marker, init_block + marker, 1)
-    with open(filepath, "w") as f:
-        f.write(content)
-    print("✅ Patch applied: multitalk_audio_stride initialized")
-else:
-    print("✅ Patch already applied, skipping")
-PYEOF
-
-echo "=== Patch done ==="
-
-# Устанавливаем зависимости
-echo "=== Installing dependencies ==="
+# Устанавливаем общие зависимости
+echo "=== Installing common dependencies ==="
 /venv/main/bin/pip install --quiet --upgrade pip
 /venv/main/bin/pip install --quiet \
-    flask requests \
-    opencv-python opencv-python-headless \
-    accelerate transformers diffusers peft \
-    gguf ftfy einops sentencepiece protobuf
+    flask \
+    requests \
+    opencv-python \
+    opencv-python-headless \
+    accelerate \
+    transformers \
+    diffusers \
+    peft \
+    gguf \
+    ftfy \
+    einops \
+    sentencepiece \
+    protobuf \
+    imageio \
+    imageio-ffmpeg \
+    av \
+    kornia \
+    || echo "⚠️ Some common dependencies failed"
 
 echo "=== Dependencies installed ==="
 
@@ -154,6 +152,19 @@ def generate():
             f.write(base64.b64decode(img_b64))
         
         workflow['148']['inputs']['image'] = 'temp.jpg'
+
+        # Удаляем ноду WanVideoTorchCompileSettings если она есть
+        # чтобы не было ошибки missing_node_type
+        nodes_to_remove = []
+        for node_id, node_data in workflow.items():
+            if isinstance(node_data, dict):
+                class_type = node_data.get('class_type', '')
+                if class_type == 'WanVideoTorchCompileSettings':
+                    nodes_to_remove.append(node_id)
+                    log(f"⚠️ Removing unsupported node: {node_id} ({class_type})")
+        
+        for node_id in nodes_to_remove:
+            del workflow[node_id]
         
         log("⏳ Waiting for ComfyUI...")
         for i in range(30):
@@ -270,32 +281,37 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8289, debug=False, threaded=True)
 EOF
 
-echo "=== Provisioning script finished ==="
+echo "=== worker.py created ==="
 
 # Удаляем флаг
 rm -f /.provisioning
 
 # Ждём ComfyUI
 echo "Waiting for ComfyUI to be ready..."
-for i in {1..30}; do
+for i in {1..60}; do
     if curl -s http://localhost:18188/ > /dev/null 2>&1; then
-        echo "ComfyUI is ready!"
+        echo "✅ ComfyUI is ready!"
         break
     fi
-    sleep 2
+    echo "  Attempt $i/60..."
+    sleep 3
 done
 
 # Запускаем worker на порту 8289
+echo "=== Starting worker ==="
 cd /workspace/ComfyUI
 nohup /venv/main/bin/python /workspace/ComfyUI/worker.py > /workspace/worker.log 2>&1 &
+WORKER_PID=$!
+echo "Worker PID: $WORKER_PID"
 
 sleep 5
 
 # Проверяем worker
-if curl -s http://localhost:8289/ > /dev/null 2>&1; then
+if curl -s http://localhost:8289/health > /dev/null 2>&1; then
     echo "✅ Worker started on port 8289"
 else
-    echo "⚠️ Worker may not be ready yet"
+    echo "⚠️ Worker health check failed, checking logs..."
+    tail -20 /workspace/worker.log || true
 fi
 
 echo "=== Provisioning complete ==="
