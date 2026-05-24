@@ -65,13 +65,18 @@ echo "=== All models downloaded ==="
 echo "=== Installing custom nodes ==="
 cd custom_nodes
 
-# ComfyUI-WanVideoWrapper (СВЕЖАЯ ВЕРСИЯ - с TorchCompileSettings и BlockSwap)
-echo "Installing ComfyUI-WanVideoWrapper..."
+# ComfyUI-WanVideoWrapper с хотфиксом
+echo "Installing ComfyUI-WanVideoWrapper with hotfix..."
 rm -rf ComfyUI-WanVideoWrapper
 git clone https://github.com/kijai/ComfyUI-WanVideoWrapper.git
 cd ComfyUI-WanVideoWrapper
-git pull origin main
 /venv/main/bin/pip install -r requirements.txt
+
+# 🔧 ХОТФИКС бага с multitalk_audio_stride (ошибка даже без аудио)
+if grep -q "if multitalk_audio_stride is not None:" nodes_sampler.py; then
+    sed -i 's/if multitalk_audio_stride is not None:/multitalk_audio_stride = locals().get("multitalk_audio_stride", None)\n        if multitalk_audio_stride is not None:/' nodes_sampler.py
+    echo "✅ Hotfix applied to nodes_sampler.py"
+fi
 cd ..
 
 # Остальные ноды
@@ -117,9 +122,6 @@ echo "=== Installing dependencies ==="
     watchdog \
     filelock
 
-# Устанавливаем PyTorch с CUDA поддержкой
-/venv/main/bin/pip install --quiet torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-
 echo "=== Dependencies installed ==="
 
 # Создаём worker.py
@@ -132,7 +134,6 @@ import os
 import requests
 import traceback
 import sys
-import glob
 from flask import Flask, request, jsonify
 from threading import Lock
 
@@ -150,24 +151,18 @@ def fix_workflow(workflow):
     """Исправляет workflow - удаляет проблемные ноды и ссылки"""
     workflow = workflow.copy()
     
-    # Список нод, которые могут отсутствовать
     nodes_to_remove = []
     
-    # Проверяем каждую ноду
     for node_id, node in workflow.items():
         class_type = node.get('class_type', '')
-        
-        # Если класс ноды疑似 отсутствует, удаляем ноду
         if class_type in ['WanVideoTorchCompileSettings', 'WanVideoBlockSwap']:
             nodes_to_remove.append(node_id)
             log(f"Will remove node {node_id} ({class_type})")
     
-    # Удаляем проблемные ноды
     for node_id in nodes_to_remove:
         if node_id in workflow:
             del workflow[node_id]
     
-    # Удаляем ссылки на удалённые ноды
     for node_id, node in workflow.items():
         if 'inputs' in node:
             inputs = node['inputs']
@@ -194,18 +189,14 @@ def generate():
                 return jsonify({'error': 'Missing workflow or image'}), 400
             
             log(f"✅ Received workflow with {len(workflow)} nodes")
-            
-            # Исправляем workflow
             workflow = fix_workflow(workflow)
             log(f"✅ After fix: {len(workflow)} nodes")
             
-            # Сохраняем изображение
             os.makedirs('/workspace/ComfyUI/input', exist_ok=True)
             img_path = '/workspace/ComfyUI/input/temp.jpg'
             with open(img_path, 'wb') as f:
                 f.write(base64.b64decode(img_b64))
             
-            # Обновляем путь в ноде LoadImage
             for node_id, node in workflow.items():
                 if node.get('class_type') == 'LoadImage':
                     node['inputs']['image'] = 'temp.jpg'
@@ -236,7 +227,6 @@ def generate():
             
             timeout = 1200
             start = time.time()
-            last_log = 0
             
             while time.time() - start < timeout:
                 try:
@@ -246,7 +236,6 @@ def generate():
                     if history.get(prompt_id):
                         outputs = history[prompt_id]['outputs']
                         
-                        # Ищем видео
                         for node_id, node_output in outputs.items():
                             for key in ['videos', 'images']:
                                 if key in node_output:
@@ -280,17 +269,6 @@ def generate():
                                                                 'file_size': len(video_bytes),
                                                                 'elapsed': int(time.time() - start)
                                                             }), 200
-                                                
-                                                # Также проверяем jpg/mp4 в outputs
-                                                if filename.endswith(('.jpg', '.png', '.jpeg')):
-                                                    # Может быть превью, игнорируем
-                                                    pass
-                    
-                    # Логируем каждые 30 секунд
-                    if int(time.time() - start) - last_log >= 30:
-                        last_log = int(time.time() - start)
-                        log(f"⏳ Still waiting... {int(time.time() - start)}s elapsed")
-                        
                 except Exception as e:
                     log(f"Error checking history: {e}")
                 
@@ -307,14 +285,6 @@ def generate():
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok', 'ready': True}), 200
-
-@app.route('/system_stats', methods=['GET'])
-def system_stats():
-    return jsonify({
-        'status': 'ok',
-        'gpu_memory': 'unknown',
-        'queue_size': 0
-    }), 200
 
 if __name__ == '__main__':
     log("🚀 Starting worker on port 8289...")
@@ -356,12 +326,10 @@ else
     echo "⚠️ Worker may not be ready yet, check logs: /workspace/worker.log"
 fi
 
-echo "=== Provisioning complete ==="
-
-# Удаляем флаг провижининга
+# Удаляем флаг провижининга (ВАЖНО!)
 rm -f /.provisioning
 
-# Выводим информацию
+echo "=== Provisioning complete ==="
 echo ""
 echo "=========================================="
 echo "INSTANCE IS READY!"
